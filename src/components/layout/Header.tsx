@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -8,58 +9,81 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Bell, LogOut, User } from 'lucide-react'
+import { Bell, LogOut, User, LogIn } from 'lucide-react'
+import { LoginModal } from '@/components/auth/LoginModal'
 
 interface HeaderProps {
-  user: { email: string; name: string }
+  user: { email: string; name: string } | null
   organization: string
 }
 
 export function Header({ user, organization }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   async function handleSignOut() {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const initials = user.name.slice(0, 2).toUpperCase()
-
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
       <div className="text-sm text-gray-600">
-        <span className="font-medium text-gray-900">{organization}</span>
+        {organization && (
+          <span className="font-medium text-gray-900">{organization}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-4 h-4 text-gray-500" />
-        </Button>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2">
-              <Avatar className="w-7 h-7">
-                <AvatarFallback className="text-xs bg-blue-100 text-blue-700">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium text-gray-700">{user.name}</span>
+        {user ? (
+          <>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="w-4 h-4 text-gray-500" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem>
-              <User className="w-4 h-4 mr-2" />
-              프로필
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
-              <LogOut className="w-4 h-4 mr-2" />
-              로그아웃
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 px-2">
+                  <Avatar className="w-7 h-7">
+                    <AvatarFallback className="text-xs bg-blue-100 text-blue-700">
+                      {user.name.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem>
+                  <User className="w-4 h-4 mr-2" />
+                  프로필
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  로그아웃
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowLoginModal(true)}
+            >
+              <LogIn className="w-4 h-4" />
+              로그인
+            </Button>
+            <LoginModal
+              open={showLoginModal}
+              onOpenChange={setShowLoginModal}
+              description="로그인하여 데이터를 저장하고 관리하세요."
+            />
+          </>
+        )}
       </div>
     </header>
   )

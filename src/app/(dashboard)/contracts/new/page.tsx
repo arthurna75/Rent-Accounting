@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { LoginModal } from '@/components/auth/LoginModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -61,6 +63,7 @@ export default function NewContractPage() {
   const [form, setForm] = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   useEffect(() => {
     fetch('/api/properties')
@@ -76,6 +79,9 @@ export default function NewContractPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    const { data: { user } } = await createClient().auth.getUser()
+    if (!user) { setShowLoginModal(true); return }
 
     if (!form.property_id) { setError('부동산을 선택해 주세요.'); return }
     if (!form.lessee_name.trim()) { setError('임차인명을 입력해 주세요.'); return }
@@ -119,6 +125,11 @@ export default function NewContractPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
+      <LoginModal
+        open={showLoginModal}
+        onOpenChange={setShowLoginModal}
+        description="계약을 등록하려면 로그인이 필요합니다."
+      />
       <div className="flex items-center gap-3">
         <Link href="/contracts">
           <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">

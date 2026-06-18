@@ -20,7 +20,11 @@ const ACCOUNT_TYPE_ORDER: AccountType[] = ['자산', '부채', '자본', '수익
 export default async function ChartOfAccountsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  if (!user) return (
+    <div className="flex h-full items-center justify-center">
+      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
+    </div>
+  )
 
   const { data: profile } = await supabase
     .from('user_profiles')

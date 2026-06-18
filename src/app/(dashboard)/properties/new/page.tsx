@@ -9,11 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { LoginModal } from '@/components/auth/LoginModal'
 
 export default function NewPropertyPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -37,6 +40,9 @@ export default function NewPropertyPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    const { data: { user } } = await createClient().auth.getUser()
+    if (!user) { setShowLoginModal(true); return }
 
     if (!form.name || !form.address_road || !form.property_type || !form.acquisition_date || !form.acquisition_cost) {
       setError('부동산명, 도로명주소, 유형, 취득일자, 취득가액은 필수 항목입니다.')
@@ -82,6 +88,11 @@ export default function NewPropertyPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <LoginModal
+        open={showLoginModal}
+        onOpenChange={setShowLoginModal}
+        description="부동산을 등록하려면 로그인이 필요합니다."
+      />
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/properties">

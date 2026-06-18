@@ -31,10 +31,10 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 interface SidebarProps {
-  role: UserRole
+  role?: UserRole
 }
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ role = 'viewer' }: SidebarProps) {
   const pathname = usePathname()
   const items = NAV_ITEMS.filter(i => i.roles.includes(role))
 

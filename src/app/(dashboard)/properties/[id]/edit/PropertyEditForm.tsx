@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
+import { LoginModal } from '@/components/auth/LoginModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -31,6 +33,7 @@ export default function PropertyEditForm({ property }: { property: Property }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   const [form, setForm] = useState({
     name: property.name,
@@ -54,6 +57,8 @@ export default function PropertyEditForm({ property }: { property: Property }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    const { data: { user } } = await createClient().auth.getUser()
+    if (!user) { setShowLoginModal(true); return }
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
@@ -92,6 +97,11 @@ export default function PropertyEditForm({ property }: { property: Property }) {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <LoginModal
+        open={showLoginModal}
+        onOpenChange={setShowLoginModal}
+        description="부동산 정보를 수정하려면 로그인이 필요합니다."
+      />
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/properties/${property.id}`}>

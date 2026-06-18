@@ -12,15 +12,19 @@ import { Lock } from 'lucide-react'
 
 interface LoginModalProps {
   open: boolean
+  /** 닫기 가능 여부. false(기본값)이면 ESC/바깥클릭으로 닫히지 않음 */
+  onOpenChange?: (open: boolean) => void
   description?: string
 }
 
-export function LoginModal({ open, description }: LoginModalProps) {
+export function LoginModal({ open, onOpenChange, description }: LoginModalProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const dismissable = !!onOpenChange
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,15 +40,19 @@ export function LoginModal({ open, description }: LoginModalProps) {
       return
     }
 
+    onOpenChange?.(false)
     router.refresh()
   }
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog
+      open={open}
+      onOpenChange={dismissable ? onOpenChange : () => {}}
+    >
       <DialogContent
         className="sm:max-w-sm"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
+        onPointerDownOutside={dismissable ? undefined : (e) => e.preventDefault()}
+        onEscapeKeyDown={dismissable ? undefined : (e) => e.preventDefault()}
       >
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
