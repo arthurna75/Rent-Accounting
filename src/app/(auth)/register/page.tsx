@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -9,12 +10,12 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,44 +34,34 @@ export default function RegisterPage() {
 
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+    try {
+      // 서버사이드 어드민 API로 이메일 인증 없이 즉시 가입
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, full_name: name }),
+      })
 
-    if (error) {
-      setError(error.message === 'User already registered' ? '이미 가입된 이메일입니다.' : '회원가입 중 오류가 발생했습니다.')
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error ?? '회원가입 중 오류가 발생했습니다.')
+        return
+      }
+
+      // 가입 즉시 로그인
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        setError('가입 완료. 로그인 페이지에서 로그인해 주세요.')
+        router.push('/login')
+        return
+      }
+
+      router.push('/')
+      router.refresh()
+    } finally {
       setLoading(false)
-      return
     }
-
-    setSuccess(true)
-    setLoading(false)
-  }
-
-  if (success) {
-    return (
-      <Card className="border-0 shadow-none bg-transparent">
-        <CardHeader className="px-0">
-          <CardTitle className="text-2xl font-bold">이메일을 확인해 주세요</CardTitle>
-          <CardDescription>
-            {email}로 인증 링크를 발송했습니다.
-            <br />
-            이메일의 링크를 클릭하여 가입을 완료해 주세요.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter className="px-0">
-          <Link href="/login">
-            <Button variant="outline" className="w-full">로그인 페이지로 돌아가기</Button>
-          </Link>
-        </CardFooter>
-      </Card>
-    )
   }
 
   return (
