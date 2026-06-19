@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,44 +37,20 @@ export default function OnboardingPage() {
 
     setLoading(true)
 
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const res = await fetch('/api/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orgName,
+        businessNumber,
+        ownerName,
+        rentalType,
+      }),
+    })
 
-    if (!user) {
-      router.push('/login')
-      return
-    }
-
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert({
-        name: orgName,
-        business_number: businessNumber.replace(/-/g, ''),
-        owner_name: ownerName,
-        rental_type: rentalType as RentalType,
-        email: user.email!,
-        fiscal_year_start_month: 1,
-      })
-      .select()
-      .single()
-
-    if (orgError) {
-      setError('조직 정보를 저장하는 중 오류가 발생했습니다.')
-      setLoading(false)
-      return
-    }
-
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .upsert({
-        id: user.id,
-        full_name: user.user_metadata?.full_name ?? ownerName,
-        organization_id: org.id,
-        role: 'owner',
-      })
-
-    if (profileError) {
-      setError('프로필 정보를 저장하는 중 오류가 발생했습니다.')
+    const json = await res.json()
+    if (!res.ok) {
+      setError(json.error ?? '저장 중 오류가 발생했습니다.')
       setLoading(false)
       return
     }
