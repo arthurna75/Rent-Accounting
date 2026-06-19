@@ -38,7 +38,7 @@ export function Header({ user, organization, onMenuClick }: HeaderProps) {
 
   async function handleSignOut() {
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push('/')
   }
 
   return (
