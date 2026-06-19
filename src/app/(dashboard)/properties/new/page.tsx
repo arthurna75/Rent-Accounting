@@ -8,35 +8,110 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ArrowLeft, Copy, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
+import { cn } from '@/lib/utils'
+
+// ────────────────────────────────────────
+// 타입
+// ────────────────────────────────────────
+interface ExistingProperty {
+  id: string
+  name: string
+  address_road: string
+  address_detail: string | null
+  property_type: string
+  rental_tax_type: string
+  acquisition_cost: number
+  acquisition_date: string
+  building_value: number | null
+  building_area: number | null
+  useful_life: number
+  depreciation_method: string
+  salvage_value: number
+  notes: string | null
+}
+
+const INITIAL_FORM = {
+  name: '',
+  address_road: '',
+  address_detail: '',
+  property_type: '',
+  rental_tax_type: '과세',
+  acquisition_cost: '',
+  acquisition_date: '',
+  building_value: '',
+  building_area: '',
+  useful_life: '40',
+  depreciation_method: '정액법',
+  salvage_value: '0',
+  notes: '',
+}
 
 export default function NewPropertyPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [form, setForm] = useState(INITIAL_FORM)
 
-  const [form, setForm] = useState({
-    name: '',
-    address_road: '',
-    address_detail: '',
-    property_type: '',
-    rental_tax_type: '과세',
-    acquisition_cost: '',
-    acquisition_date: '',
-    building_value: '',
-    building_area: '',
-    useful_life: '40',
-    depreciation_method: '정액법',
-    salvage_value: '0',
-    notes: '',
-  })
+  // ── 복사 다이얼로그 상태 ──
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyList, setCopyList] = useState<ExistingProperty[]>([])
+  const [copySearch, setCopySearch] = useState('')
+  const [copyLoading, setCopyLoading] = useState(false)
 
   const set = (key: string, value: string) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
+  // ── 기존 부동산 목록 로드 & 다이얼로그 오픈 ──
+  async function openCopyDialog() {
+    setCopyOpen(true)
+    if (copyList.length > 0) return
+    setCopyLoading(true)
+    try {
+      const res = await fetch('/api/properties?limit=200')
+      const json = await res.json()
+      setCopyList(json.data ?? [])
+    } catch {
+      // silent
+    } finally {
+      setCopyLoading(false)
+    }
+  }
+
+  // ── 선택한 부동산 데이터를 폼에 적용 ──
+  function applyCopy(p: ExistingProperty) {
+    setForm({
+      name:                p.name,
+      address_road:        p.address_road,
+      address_detail:      p.address_detail ?? '',
+      property_type:       p.property_type,
+      rental_tax_type:     p.rental_tax_type,
+      acquisition_cost:    String(p.acquisition_cost),
+      acquisition_date:    p.acquisition_date,
+      building_value:      p.building_value != null ? String(p.building_value) : '',
+      building_area:       p.building_area  != null ? String(p.building_area)  : '',
+      useful_life:         String(p.useful_life),
+      depreciation_method: p.depreciation_method,
+      salvage_value:       String(p.salvage_value),
+      notes:               p.notes ?? '',
+    })
+    setCopyOpen(false)
+    setCopySearch('')
+    setError(null)
+  }
+
+  // ── 검색 필터 ──
+  const filteredList = copyList.filter(p =>
+    p.name.includes(copySearch) ||
+    p.address_road.includes(copySearch) ||
+    p.property_type.includes(copySearch),
+  )
+
+  // ── 제출 ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -52,20 +127,20 @@ export default function NewPropertyPage() {
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
-        name: form.name,
-        address_road: form.address_road,
-        property_type: form.property_type,
-        rental_tax_type: form.rental_tax_type,
-        acquisition_cost: parseFloat(form.acquisition_cost),
-        acquisition_date: form.acquisition_date,
-        useful_life: parseInt(form.useful_life) || 40,
+        name:                form.name,
+        address_road:        form.address_road,
+        property_type:       form.property_type,
+        rental_tax_type:     form.rental_tax_type,
+        acquisition_cost:    parseFloat(form.acquisition_cost),
+        acquisition_date:    form.acquisition_date,
+        useful_life:         parseInt(form.useful_life) || 40,
         depreciation_method: form.depreciation_method,
-        salvage_value: parseFloat(form.salvage_value) || 0,
+        salvage_value:       parseFloat(form.salvage_value) || 0,
       }
       if (form.address_detail) body.address_detail = form.address_detail
       if (form.building_value) body.building_value = parseFloat(form.building_value)
-      if (form.building_area) body.building_area = parseFloat(form.building_area)
-      if (form.notes) body.notes = form.notes
+      if (form.building_area)  body.building_area  = parseFloat(form.building_area)
+      if (form.notes)          body.notes          = form.notes
 
       const res = await fetch('/api/properties', {
         method: 'POST',
@@ -93,6 +168,66 @@ export default function NewPropertyPage() {
         onOpenChange={setShowLoginModal}
         description="부동산을 등록하려면 로그인이 필요합니다."
       />
+
+      {/* ── 기존 부동산 복사 다이얼로그 ── */}
+      <Dialog open={copyOpen} onOpenChange={open => { setCopyOpen(open); if (!open) setCopySearch('') }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>기존 부동산에서 복사</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-500 -mt-1">
+            선택한 부동산의 정보를 폼에 붙여넣습니다. 복사 후 필요한 항목을 수정하세요.
+          </p>
+
+          {/* 검색 */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Input
+              placeholder="부동산명 또는 주소로 검색..."
+              value={copySearch}
+              onChange={e => setCopySearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* 목록 */}
+          <div className="overflow-y-auto max-h-[52vh] space-y-2 pr-1">
+            {copyLoading ? (
+              <p className="text-center text-sm text-gray-400 py-10">불러오는 중...</p>
+            ) : filteredList.length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-10">
+                {copySearch ? '검색 결과가 없습니다.' : '등록된 부동산이 없습니다.'}
+              </p>
+            ) : filteredList.map(p => (
+              <div
+                key={p.id}
+                className="flex items-start justify-between gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-sm text-gray-900 truncate">{p.name}</p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {p.property_type} · {p.address_road}{p.address_detail ? ` ${p.address_detail}` : ''}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    취득가액 {p.acquisition_cost.toLocaleString()}원 · 취득일 {p.acquisition_date}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 gap-1"
+                  onClick={() => applyCopy(p)}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  복사
+                </Button>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 헤더 */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/properties">
@@ -104,7 +239,19 @@ export default function NewPropertyPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">부동산 등록</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-lg">부동산 등록</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-gray-600"
+              onClick={openCopyDialog}
+            >
+              <Copy className="w-3.5 h-3.5" />
+              기존에서 복사
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -168,9 +315,7 @@ export default function NewPropertyPage() {
               <div className="space-y-1.5">
                 <Label>과세유형 <span className="text-red-500">*</span></Label>
                 <Select value={form.rental_tax_type} onValueChange={v => set('rental_tax_type', v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="과세">과세</SelectItem>
                     <SelectItem value="면세">면세</SelectItem>
@@ -230,9 +375,7 @@ export default function NewPropertyPage() {
               <div className="space-y-1.5">
                 <Label>감가상각방법</Label>
                 <Select value={form.depreciation_method} onValueChange={v => set('depreciation_method', v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="정액법">정액법</SelectItem>
                     <SelectItem value="정률법">정률법</SelectItem>
@@ -267,7 +410,11 @@ export default function NewPropertyPage() {
                 <textarea
                   id="notes"
                   rows={3}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                  className={cn(
+                    'w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+                    'ring-offset-background placeholder:text-muted-foreground',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none',
+                  )}
                   placeholder="특이사항, 관리 메모 등"
                   value={form.notes}
                   onChange={e => set('notes', e.target.value)}

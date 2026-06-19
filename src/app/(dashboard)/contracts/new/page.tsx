@@ -6,18 +6,38 @@ import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Copy, Search } from 'lucide-react'
 import Link from 'next/link'
 
+// ────────────────────────────────────────
+// 타입
+// ────────────────────────────────────────
 interface Property {
   id: string
   name: string
   address_road: string
+}
+
+interface ExistingContract {
+  id: string
+  contract_number: string
+  property_id: string
+  contract_type: ContractType
+  lessee_name: string
+  lessee_phone: string | null
+  lessee_email: string | null
+  deposit_amount: number
+  monthly_rent: number
+  vat_included: boolean
+  payment_due_day: number
+  notes: string | null
+  property?: { name: string; address_road: string }
 }
 
 type ContractType = '월세' | '전세' | '반전세'
@@ -65,8 +85,14 @@ export default function NewContractPage() {
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
+  // ── 복사 다이얼로그 상태 ──
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyList, setCopyList] = useState<ExistingContract[]>([])
+  const [copySearch, setCopySearch] = useState('')
+  const [copyLoading, setCopyLoading] = useState(false)
+
   useEffect(() => {
-    fetch('/api/properties')
+    fetch('/api/properties?limit=200')
       .then(r => r.json())
       .then(json => setProperties(json.data ?? []))
       .catch(() => {})
@@ -76,6 +102,52 @@ export default function NewContractPage() {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  // ── 기존 계약 목록 로드 & 다이얼로그 오픈 ──
+  async function openCopyDialog() {
+    setCopyOpen(true)
+    if (copyList.length > 0) return
+    setCopyLoading(true)
+    try {
+      const res = await fetch('/api/contracts?limit=200')
+      const json = await res.json()
+      setCopyList(json.data ?? [])
+    } catch {
+      // silent
+    } finally {
+      setCopyLoading(false)
+    }
+  }
+
+  // ── 선택한 계약 데이터를 폼에 적용 ──
+  // 계약번호·시작일·종료일은 초기화 (신규 계약에 맞게 입력 필요)
+  function applyCopy(c: ExistingContract) {
+    setForm({
+      property_id:    c.property_id,
+      contract_type:  c.contract_type,
+      contract_number: '',        // 신규 번호 입력 필요
+      lessee_name:    c.lessee_name,
+      lessee_phone:   c.lessee_phone  ?? '',
+      lessee_email:   c.lessee_email  ?? '',
+      deposit_amount: String(c.deposit_amount),
+      monthly_rent:   String(c.monthly_rent),
+      vat_included:   c.vat_included,
+      payment_due_day: String(c.payment_due_day),
+      start_date:     '',         // 신규 기간 입력 필요
+      end_date:       '',         // 신규 기간 입력 필요
+      notes:          c.notes ?? '',
+    })
+    setCopyOpen(false)
+    setCopySearch('')
+    setError(null)
+  }
+
+  // ── 검색 필터 ──
+  const filteredContracts = copyList.filter(c =>
+    c.lessee_name.includes(copySearch) ||
+    c.contract_number.includes(copySearch) ||
+    (c.property?.name ?? '').includes(copySearch),
+  )
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -83,8 +155,8 @@ export default function NewContractPage() {
     const { data: { user } } = await createClient().auth.getUser()
     if (!user) { setShowLoginModal(true); return }
 
-    if (!form.property_id) { setError('부동산을 선택해 주세요.'); return }
-    if (!form.lessee_name.trim()) { setError('임차인명을 입력해 주세요.'); return }
+    if (!form.property_id)          { setError('부동산을 선택해 주세요.');     return }
+    if (!form.lessee_name.trim())   { setError('임차인명을 입력해 주세요.');   return }
     if (!form.start_date || !form.end_date) { setError('계약 기간을 입력해 주세요.'); return }
     if (!form.contract_number.trim()) { setError('계약 번호를 입력해 주세요.'); return }
 
@@ -94,19 +166,19 @@ export default function NewContractPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          property_id: form.property_id,
-          contract_type: form.contract_type,
+          property_id:     form.property_id,
+          contract_type:   form.contract_type,
           contract_number: form.contract_number,
-          lessee_name: form.lessee_name,
-          lessee_phone: form.lessee_phone || undefined,
-          lessee_email: form.lessee_email || undefined,
-          deposit_amount: parseFloat(form.deposit_amount) || 0,
-          monthly_rent: parseFloat(form.monthly_rent) || 0,
-          vat_included: form.vat_included,
-          payment_due_day: parseInt(form.payment_due_day) || 1,
-          start_date: form.start_date,
-          end_date: form.end_date,
-          notes: form.notes || undefined,
+          lessee_name:     form.lessee_name,
+          lessee_phone:    form.lessee_phone  || undefined,
+          lessee_email:    form.lessee_email  || undefined,
+          deposit_amount:  parseFloat(form.deposit_amount) || 0,
+          monthly_rent:    parseFloat(form.monthly_rent)   || 0,
+          vat_included:    form.vat_included,
+          payment_due_day: parseInt(form.payment_due_day)  || 1,
+          start_date:      form.start_date,
+          end_date:        form.end_date,
+          notes:           form.notes || undefined,
         }),
       })
       if (!res.ok) {
@@ -130,18 +202,100 @@ export default function NewContractPage() {
         onOpenChange={setShowLoginModal}
         description="계약을 등록하려면 로그인이 필요합니다."
       />
-      <div className="flex items-center gap-3">
-        <Link href="/contracts">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
-            <ArrowLeft className="w-4 h-4" />
-            뒤로
-          </Button>
-        </Link>
-        <h2 className="text-xl font-semibold text-gray-900">새 임대계약 등록</h2>
+
+      {/* ── 기존 계약 복사 다이얼로그 ── */}
+      <Dialog open={copyOpen} onOpenChange={open => { setCopyOpen(open); if (!open) setCopySearch('') }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>기존 계약에서 복사</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-gray-500 -mt-1">
+            선택한 계약의 정보를 폼에 붙여넣습니다.
+            <span className="text-amber-600 ml-1">계약번호·계약기간은 초기화되니 새로 입력하세요.</span>
+          </p>
+
+          {/* 검색 */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Input
+              placeholder="임차인명, 계약번호, 부동산명 검색..."
+              value={copySearch}
+              onChange={e => setCopySearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* 목록 */}
+          <div className="overflow-y-auto max-h-[52vh] space-y-2 pr-1">
+            {copyLoading ? (
+              <p className="text-center text-sm text-gray-400 py-10">불러오는 중...</p>
+            ) : filteredContracts.length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-10">
+                {copySearch ? '검색 결과가 없습니다.' : '등록된 계약이 없습니다.'}
+              </p>
+            ) : filteredContracts.map(c => (
+              <div
+                key={c.id}
+                className="flex items-start justify-between gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium text-sm text-gray-900">{c.lessee_name}</p>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                      {c.contract_type}
+                    </span>
+                    <span className="text-xs text-gray-400">{c.contract_number}</span>
+                  </div>
+                  {c.property && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      {c.property.name} · {c.property.address_road}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    보증금 {c.deposit_amount.toLocaleString()}원
+                    {c.monthly_rent > 0 && ` · 월세 ${c.monthly_rent.toLocaleString()}원`}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 gap-1"
+                  onClick={() => applyCopy(c)}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  복사
+                </Button>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 헤더 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link href="/contracts">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
+              <ArrowLeft className="w-4 h-4" />
+              뒤로
+            </Button>
+          </Link>
+          <h2 className="text-xl font-semibold text-gray-900">새 임대계약 등록</h2>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-gray-600"
+          onClick={openCopyDialog}
+        >
+          <Copy className="w-3.5 h-3.5" />
+          기존에서 복사
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 부동산 & 계약 기본 */}
+        {/* 계약 기본 정보 */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">계약 기본 정보</CardTitle>
@@ -150,18 +304,14 @@ export default function NewContractPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-1.5">
                 <Label>부동산 <span className="text-red-500">*</span></Label>
-                <Select
-                  value={form.property_id}
-                  onValueChange={v => set('property_id', v)}
-                >
+                <Select value={form.property_id} onValueChange={v => set('property_id', v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="부동산 선택" />
                   </SelectTrigger>
                   <SelectContent>
                     {properties.map(p => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                        {p.address_road ? ` · ${p.address_road}` : ''}
+                        {p.name}{p.address_road ? ` · ${p.address_road}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -174,9 +324,7 @@ export default function NewContractPage() {
                   value={form.contract_type}
                   onValueChange={v => set('contract_type', v as ContractType)}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="월세">월세</SelectItem>
                     <SelectItem value="전세">전세</SelectItem>
@@ -269,13 +417,8 @@ export default function NewContractPage() {
               {!isJeonse && (
                 <div className="space-y-1.5">
                   <Label>납부일</Label>
-                  <Select
-                    value={form.payment_due_day}
-                    onValueChange={v => set('payment_due_day', v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={form.payment_due_day} onValueChange={v => set('payment_due_day', v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
                         <SelectItem key={d} value={String(d)}>{d}일</SelectItem>
