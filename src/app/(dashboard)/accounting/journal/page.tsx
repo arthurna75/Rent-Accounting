@@ -4,6 +4,7 @@ import { JournalLedgerTable } from '@/components/accounting/JournalLedgerTable'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { PlusCircle } from 'lucide-react'
+import { SampleJournal } from '@/components/sample/SampleJournal'
 
 interface PageProps {
   searchParams: Promise<{ status?: string; from?: string; to?: string; page?: string }>
@@ -12,6 +13,16 @@ interface PageProps {
 export default async function JournalPage({ searchParams }: PageProps) {
   const params = await searchParams
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return <SampleJournal isGuest />
+
+  const { data: profile } = await supabase
+    .from('user_profiles').select('organization_id').eq('id', user.id).single()
+
+  const { count: propCount } = await supabase
+    .from('properties').select('id', { count: 'exact', head: true })
+    .eq('organization_id', profile!.organization_id)
+  if ((propCount ?? 0) === 0) return <SampleJournal isGuest={false} />
 
   const page = parseInt(params.page ?? '1')
   const limit = 30

@@ -4,15 +4,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { formatKRW } from '@/lib/utils/format'
 import { DepreciationAction } from './DepreciationAction'
+import { SampleDepreciation } from '@/components/sample/SampleDepreciation'
 
 export default async function DepreciationPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleDepreciation isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -28,6 +25,8 @@ export default async function DepreciationPage() {
     .eq('organization_id', profile!.organization_id)
     .eq('fiscal_year', currentYear)
     .order('period_month', { ascending: true })
+
+  if (!schedules || schedules.length === 0) return <SampleDepreciation isGuest={false} />
 
   return (
     <div className="space-y-6">

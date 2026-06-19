@@ -1,6 +1,12 @@
+import { createClient } from '@/lib/supabase/server'
 import { IncomeStatementClient } from './IncomeStatementClient'
+import { SampleIncomeStatement } from '@/components/sample/SampleReports'
 
-export default function IncomeStatementPage() {
+export default async function IncomeStatementPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return <SampleIncomeStatement isGuest />
+
   const currentYear = new Date().getFullYear()
 
   return (

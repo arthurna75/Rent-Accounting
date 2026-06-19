@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatKRW, formatDate } from '@/lib/utils/format'
+import { SampleContracts } from '@/components/sample/SampleContracts'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -75,17 +76,20 @@ export default async function ContractsPage({ searchParams }: PageProps) {
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleContracts isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('organization_id')
     .eq('id', user.id)
     .single()
+
+  // 부동산 없으면 샘플
+  const { count: propCount } = await supabase
+    .from('properties')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', profile!.organization_id)
+  if ((propCount ?? 0) === 0) return <SampleContracts isGuest={false} />
 
   const baseQuery = () =>
     supabase

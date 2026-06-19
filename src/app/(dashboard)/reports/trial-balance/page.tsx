@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatKRW } from '@/lib/utils/format'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { SampleTrialBalance } from '@/components/sample/SampleReports'
 
 interface PageProps {
   searchParams: Promise<{ year?: string }>
@@ -18,11 +19,7 @@ export default async function TrialBalancePage({ searchParams }: PageProps) {
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleTrialBalance isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -128,13 +125,7 @@ async function TrialBalanceContent({
   }
 
   if (rows.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center text-sm text-gray-400">
-          분개 데이터가 없습니다.
-        </CardContent>
-      </Card>
-    )
+    return <SampleTrialBalance isGuest={false} />
   }
 
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0)

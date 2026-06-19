@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatKRW } from '@/lib/utils/format'
-import { Building2, FileText, TrendingUp, AlertCircle, Wallet, PieChart } from 'lucide-react'
+import { Building2, FileText, TrendingUp, AlertCircle, Wallet } from 'lucide-react'
+import { SampleDashboard } from '@/components/sample/SampleDashboard'
 
 async function getDashboardStats(organizationId: string) {
   const supabase = await createClient()
@@ -82,17 +83,20 @@ async function getRecentContracts(organizationId: string) {
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleDashboard isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('organization_id')
     .eq('id', user.id)
     .single()
+
+  const { count: propCount } = await supabase
+    .from('properties')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', profile!.organization_id)
+
+  if ((propCount ?? 0) === 0) return <SampleDashboard isGuest={false} />
 
   const [stats, recentContracts] = await Promise.all([
     getDashboardStats(profile!.organization_id),

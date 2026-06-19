@@ -1,7 +1,12 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { createClient } from '@/lib/supabase/server'
 import { BalanceSheetClient } from './BalanceSheetClient'
+import { SampleBalanceSheet } from '@/components/sample/SampleReports'
 
-export default function BalanceSheetPage() {
+export default async function BalanceSheetPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return <SampleBalanceSheet isGuest />
+
   const today = new Date().toISOString().split('T')[0]
 
   return (

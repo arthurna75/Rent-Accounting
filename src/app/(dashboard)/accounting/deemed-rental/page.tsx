@@ -3,15 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatKRW, formatPercent } from '@/lib/utils/format'
 import { DeemedRentalAction } from './DeemedRentalAction'
+import { SampleDeemedRental } from '@/components/sample/SampleDeemedRental'
 
 export default async function DeemedRentalPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleDeemedRental isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -33,6 +30,8 @@ export default async function DeemedRentalPage() {
     .eq('organization_id', profile!.organization_id)
     .eq('fiscal_year', currentYear)
     .order('created_at', { ascending: false })
+
+  if (!calcs || calcs.length === 0) return <SampleDeemedRental isGuest={false} />
 
   const totalTaxable = calcs?.reduce((s, c) => s + (c.taxable_deemed_income ?? 0), 0) ?? 0
 

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatKRW } from '@/lib/utils/format'
 import { Building2, Plus } from 'lucide-react'
+import { SampleProperties } from '@/components/sample/SampleProperties'
 
 type Property = {
   id: string
@@ -26,11 +27,7 @@ const typeBadgeVariant: Record<string, string> = {
 export default async function PropertiesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleProperties isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -46,6 +43,7 @@ export default async function PropertiesPage() {
     .order('created_at', { ascending: false })
 
   const list = (properties ?? []) as unknown as Property[]
+  if (list.length === 0) return <SampleProperties isGuest={false} />
 
   return (
     <div className="space-y-6">

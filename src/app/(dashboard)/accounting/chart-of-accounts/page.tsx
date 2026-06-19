@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import type { AccountType } from '@/types/database'
+import { SampleChartOfAccounts } from '@/components/sample/SampleChartOfAccounts'
 
 type Account = {
   id: string
@@ -20,11 +21,7 @@ const ACCOUNT_TYPE_ORDER: AccountType[] = ['자산', '부채', '자본', '수익
 export default async function ChartOfAccountsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-gray-400">로그인 후 이용할 수 있습니다.</p>
-    </div>
-  )
+  if (!user) return <SampleChartOfAccounts isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -39,6 +36,7 @@ export default async function ChartOfAccountsPage() {
     .order('code', { ascending: true })
 
   const accountList = (accounts ?? []) as Account[]
+  if (accountList.length === 0) return <SampleChartOfAccounts isGuest={false} />
 
   const grouped: Record<AccountType, Account[]> = {
     자산: [],

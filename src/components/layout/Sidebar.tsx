@@ -32,14 +32,23 @@ const NAV_ITEMS: NavItem[] = [
 
 interface SidebarProps {
   role?: UserRole
+  isSampleMode?: boolean
 }
 
-export function Sidebar({ role = 'viewer' }: SidebarProps) {
+export function Sidebar({ role = 'viewer', isSampleMode = false }: SidebarProps) {
   const pathname = usePathname()
   const items = NAV_ITEMS.filter(i => i.roles.includes(role))
 
   return (
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
+      {/* 예시 모드 배너 */}
+      {isSampleMode && (
+        <div className="flex items-center justify-center gap-1.5 bg-amber-400 py-1.5 text-xs font-bold text-amber-900 tracking-wide">
+          <span>★</span>
+          <span>예시 데이터 보는 중</span>
+          <span>★</span>
+        </div>
+      )}
       {/* Logo */}
       <div className="px-6 py-5 border-b border-gray-100">
         <h1 className="text-lg font-bold text-blue-700 leading-tight">
