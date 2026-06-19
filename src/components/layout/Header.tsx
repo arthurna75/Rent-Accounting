@@ -23,6 +23,8 @@ const QUICK_LINKS = [
   { label: '공시가격',   href: 'https://www.realtyprice.kr/notice/main/main.do' },
   { label: '토지이용계획', href: 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp' },
   { label: '홈택스',     href: 'https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&menuCd=index3' },
+  { label: '임대보증가입', href: 'https://www.khug.or.kr/hug/web/cg/sd/cgsd000001.jsp?tabMenu=Y' },
+  { label: '인터넷등기소', href: 'https://www.iros.go.kr/index.jsp' },
 ]
 
 export function Header({ user, organization, onMenuClick }: HeaderProps) {
