@@ -47,3 +47,14 @@
       'Noto Sans KR', 'Malgun Gothic', sans-serif;
   }
 }
+
+@layer utilities {
+  /* 스크롤바 숨김 — 헤더 퀵링크 영역 가로 스크롤용 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

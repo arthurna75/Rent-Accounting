@@ -74,6 +74,13 @@ const INITIAL: FormState = {
   notes: '',
 }
 
+// 숫자만 추출 / 콤마 포맷
+function digits(v: string) { return v.replace(/[^0-9]/g, '') }
+function commaFmt(v: string) {
+  const n = parseInt(digits(v), 10)
+  return isNaN(n) ? '' : n.toLocaleString('ko-KR')
+}
+
 export default function NewContractPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -393,10 +400,10 @@ export default function NewContractPage() {
               <div className="space-y-1.5">
                 <Label>보증금 (원)</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  value={form.deposit_amount}
-                  onChange={e => set('deposit_amount', e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={commaFmt(form.deposit_amount)}
+                  onChange={e => set('deposit_amount', digits(e.target.value))}
                   placeholder="0"
                 />
               </div>
@@ -405,10 +412,10 @@ export default function NewContractPage() {
                 <div className="space-y-1.5">
                   <Label>월세 (원)</Label>
                   <Input
-                    type="number"
-                    min="0"
-                    value={form.monthly_rent}
-                    onChange={e => set('monthly_rent', e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.monthly_rent)}
+                    onChange={e => set('monthly_rent', digits(e.target.value))}
                     placeholder="0"
                   />
                 </div>

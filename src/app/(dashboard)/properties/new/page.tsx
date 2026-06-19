@@ -71,6 +71,14 @@ const INITIAL_FORM = {
   notes: '',
 }
 
+// 숫자만 추출 (콤마 제거)
+function digits(v: string) { return v.replace(/[^0-9]/g, '') }
+// 콤마 포맷으로 표시
+function commaFmt(v: string) {
+  const n = parseInt(digits(v), 10)
+  return isNaN(n) ? '' : n.toLocaleString('ko-KR')
+}
+
 export default function NewPropertyPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -397,11 +405,11 @@ export default function NewPropertyPage() {
                 <Label htmlFor="acquisition_cost">취득가액 (원) <span className="text-red-500">*</span></Label>
                 <Input
                   id="acquisition_cost"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
                   placeholder="0"
-                  value={form.acquisition_cost}
-                  onChange={e => set('acquisition_cost', e.target.value)}
+                  value={commaFmt(form.acquisition_cost)}
+                  onChange={e => set('acquisition_cost', digits(e.target.value))}
                   required
                 />
               </div>
@@ -410,11 +418,11 @@ export default function NewPropertyPage() {
                 <Label htmlFor="building_value">건물가액 (원)</Label>
                 <Input
                   id="building_value"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
                   placeholder="감가상각 기준금액"
-                  value={form.building_value}
-                  onChange={e => set('building_value', e.target.value)}
+                  value={commaFmt(form.building_value)}
+                  onChange={e => set('building_value', digits(e.target.value))}
                 />
               </div>
 
@@ -457,10 +465,10 @@ export default function NewPropertyPage() {
                 <Label htmlFor="salvage_value">잔존가치 (원)</Label>
                 <Input
                   id="salvage_value"
-                  type="number"
-                  min="0"
-                  value={form.salvage_value}
-                  onChange={e => set('salvage_value', e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={commaFmt(form.salvage_value)}
+                  onChange={e => set('salvage_value', digits(e.target.value))}
                 />
               </div>
 

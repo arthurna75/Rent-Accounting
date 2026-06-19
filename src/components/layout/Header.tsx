@@ -59,8 +59,8 @@ export function Header({ user, organization, onMenuClick }: HeaderProps) {
         )}
       </div>
 
-      {/* 가운데: 바로가기 링크 (모바일에서 일부 숨김) */}
-      <div className="flex items-center gap-0.5 flex-1 justify-center overflow-x-auto">
+      {/* 가운데: 바로가기 링크 — 항상 텍스트 표시, 넘칠 경우 가로 스크롤 */}
+      <div className="flex items-center gap-0.5 flex-1 overflow-x-auto scrollbar-hide min-w-0">
         {QUICK_LINKS.map(({ label, href }) => (
           <a
             key={label}
@@ -69,8 +69,8 @@ export function Header({ user, organization, onMenuClick }: HeaderProps) {
             rel="noopener noreferrer"
             className="flex items-center gap-1 shrink-0 rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors whitespace-nowrap"
           >
-            <ExternalLink className="w-3 h-3" />
-            <span className="hidden sm:inline">{label}</span>
+            <ExternalLink className="w-3 h-3 shrink-0" />
+            {label}
           </a>
         ))}
       </div>
