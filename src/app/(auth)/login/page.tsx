@@ -73,6 +73,15 @@ export default function LoginPage() {
             {loading ? '로그인 중...' : '로그인'}
           </Button>
         </form>
+        <div className="mt-3 flex justify-center gap-4 text-xs text-muted-foreground">
+          <Link href="/find-id" className="hover:text-primary hover:underline">
+            아이디 찾기
+          </Link>
+          <span>·</span>
+          <Link href="/find-password" className="hover:text-primary hover:underline">
+            비밀번호 찾기
+          </Link>
+        </div>
       </CardContent>
       <CardFooter className="px-0 justify-center">
         <p className="text-sm text-muted-foreground">
