@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
@@ -32,8 +32,10 @@ interface ExistingContract {
   lessee_name: string
   lessee_phone: string | null
   lessee_email: string | null
+  lessee_id_number?: string | null
   deposit_amount: number
   monthly_rent: number
+  monthly_management_fee?: number | null
   vat_included: boolean
   payment_due_day: number
   notes: string | null
@@ -43,38 +45,49 @@ interface ExistingContract {
 type ContractType = '월세' | '전세' | '반전세'
 
 interface FormState {
-  property_id: string
-  contract_type: ContractType
-  contract_number: string
-  lessee_name: string
-  lessee_phone: string
-  lessee_email: string
-  deposit_amount: string
-  monthly_rent: string
-  vat_included: boolean
-  payment_due_day: string
-  start_date: string
-  end_date: string
-  notes: string
+  property_id:              string
+  contract_type:            ContractType
+  contract_number:          string
+  contract_date:            string
+  lessee_name:              string
+  lessee_phone:             string
+  lessee_id_front:          string
+  lessee_id_back:           string
+  lessee_email:             string
+  deposit_amount:           string
+  monthly_rent:             string
+  monthly_management_fee:   string
+  vat_included:             boolean
+  payment_due_day:          string
+  auto_journal_rent:        boolean
+  auto_journal_mgmt:        boolean
+  start_date:               string
+  end_date:                 string
+  notes:                    string
 }
 
 const INITIAL: FormState = {
-  property_id: '',
-  contract_type: '월세',
-  contract_number: '',
-  lessee_name: '',
-  lessee_phone: '',
-  lessee_email: '',
-  deposit_amount: '',
-  monthly_rent: '',
-  vat_included: false,
-  payment_due_day: '1',
-  start_date: '',
-  end_date: '',
-  notes: '',
+  property_id:            '',
+  contract_type:          '월세',
+  contract_number:        '',
+  contract_date:          '',
+  lessee_name:            '',
+  lessee_phone:           '',
+  lessee_id_front:        '',
+  lessee_id_back:         '',
+  lessee_email:           '',
+  deposit_amount:         '',
+  monthly_rent:           '',
+  monthly_management_fee: '',
+  vat_included:           true,
+  payment_due_day:        '1',
+  auto_journal_rent:      false,
+  auto_journal_mgmt:      false,
+  start_date:             '',
+  end_date:               '',
+  notes:                  '',
 }
 
-// 숫자만 추출 / 콤마 포맷
 function digits(v: string) { return v.replace(/[^0-9]/g, '') }
 function commaFmt(v: string) {
   const n = parseInt(digits(v), 10)
@@ -82,27 +95,37 @@ function commaFmt(v: string) {
 }
 
 export default function NewContractPage() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
   const propertyIdParam = searchParams.get('propertyId') ?? ''
 
-  const [properties, setProperties] = useState<Property[]>([])
-  const [form, setForm] = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [properties,     setProperties]     = useState<Property[]>([])
+  const [form,           setForm]           = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
+  const [submitting,     setSubmitting]     = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
+  const idFrontRef = useRef<HTMLInputElement>(null)
+  const idBackRef  = useRef<HTMLInputElement>(null)
+
   // ── 복사 다이얼로그 상태 ──
-  const [copyOpen, setCopyOpen] = useState(false)
-  const [copyList, setCopyList] = useState<ExistingContract[]>([])
-  const [copySearch, setCopySearch] = useState('')
+  const [copyOpen,    setCopyOpen]    = useState(false)
+  const [copyList,    setCopyList]    = useState<ExistingContract[]>([])
+  const [copySearch,  setCopySearch]  = useState('')
   const [copyLoading, setCopyLoading] = useState(false)
 
+  // 부동산 목록 + 다음 계약번호 로드
   useEffect(() => {
     fetch('/api/properties?limit=200')
       .then(r => r.json())
       .then(json => setProperties(json.data ?? []))
       .catch(() => {})
+
+    fetch('/api/contracts/next-number')
+      .then(r => r.json())
+      .then(json => { if (json.number) set('contract_number', json.number) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -125,30 +148,33 @@ export default function NewContractPage() {
     }
   }
 
-  // ── 선택한 계약 데이터를 폼에 적용 ──
-  // 계약번호·시작일·종료일은 초기화 (신규 계약에 맞게 입력 필요)
   function applyCopy(c: ExistingContract) {
-    setForm({
-      property_id:    c.property_id,
-      contract_type:  c.contract_type,
-      contract_number: '',        // 신규 번호 입력 필요
-      lessee_name:    c.lessee_name,
-      lessee_phone:   c.lessee_phone  ?? '',
-      lessee_email:   c.lessee_email  ?? '',
-      deposit_amount: String(c.deposit_amount),
-      monthly_rent:   String(c.monthly_rent),
-      vat_included:   c.vat_included,
-      payment_due_day: String(c.payment_due_day),
-      start_date:     '',         // 신규 기간 입력 필요
-      end_date:       '',         // 신규 기간 입력 필요
-      notes:          c.notes ?? '',
-    })
+    const [idFront = '', idBack = ''] = (c.lessee_id_number ?? '').split('-')
+    setForm(prev => ({
+      ...INITIAL,
+      contract_number:        prev.contract_number,   // 자동채번 유지
+      property_id:            c.property_id,
+      contract_type:          c.contract_type,
+      contract_date:          '',                      // 새 계약일 입력
+      lessee_name:            c.lessee_name,
+      lessee_phone:           c.lessee_phone ?? '',
+      lessee_id_front:        idFront,
+      lessee_id_back:         idBack,
+      lessee_email:           c.lessee_email ?? '',
+      deposit_amount:         String(c.deposit_amount),
+      monthly_rent:           String(c.monthly_rent),
+      monthly_management_fee: c.monthly_management_fee ? String(c.monthly_management_fee) : '',
+      vat_included:           c.vat_included,
+      payment_due_day:        String(c.payment_due_day),
+      start_date:             '',
+      end_date:               '',
+      notes:                  c.notes ?? '',
+    }))
     setCopyOpen(false)
     setCopySearch('')
     setError(null)
   }
 
-  // ── 검색 필터 ──
   const filteredContracts = copyList.filter(c =>
     c.lessee_name.includes(copySearch) ||
     c.contract_number.includes(copySearch) ||
@@ -162,10 +188,14 @@ export default function NewContractPage() {
     const { data: { user } } = await createClient().auth.getUser()
     if (!user) { setShowLoginModal(true); return }
 
-    if (!form.property_id)          { setError('부동산을 선택해 주세요.');     return }
-    if (!form.lessee_name.trim())   { setError('임차인명을 입력해 주세요.');   return }
+    if (!form.property_id)           { setError('부동산을 선택해 주세요.');          return }
+    if (!form.lessee_name.trim())    { setError('임차인명을 입력해 주세요.');         return }
+    if (!form.lessee_phone.trim())   { setError('연락처를 입력해 주세요.');           return }
+    if (!form.contract_date)         { setError('계약일자를 입력해 주세요.');         return }
+    if (form.lessee_id_front.length !== 6) { setError('주민번호 앞 6자리를 입력해 주세요.'); return }
+    if (form.lessee_id_back.length  !== 1) { setError('주민번호 뒷 1자리를 입력해 주세요.'); return }
     if (!form.start_date || !form.end_date) { setError('계약 기간을 입력해 주세요.'); return }
-    if (!form.contract_number.trim()) { setError('계약 번호를 입력해 주세요.'); return }
+    if (!form.contract_number.trim()) { setError('계약 번호를 입력해 주세요.');       return }
 
     setSubmitting(true)
     try {
@@ -173,19 +203,26 @@ export default function NewContractPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          property_id:     form.property_id,
-          contract_type:   form.contract_type,
-          contract_number: form.contract_number,
-          lessee_name:     form.lessee_name,
-          lessee_phone:    form.lessee_phone  || undefined,
-          lessee_email:    form.lessee_email  || undefined,
-          deposit_amount:  parseFloat(form.deposit_amount) || 0,
-          monthly_rent:    parseFloat(form.monthly_rent)   || 0,
-          vat_included:    form.vat_included,
-          payment_due_day: parseInt(form.payment_due_day)  || 1,
-          start_date:      form.start_date,
-          end_date:        form.end_date,
-          notes:           form.notes || undefined,
+          property_id:            form.property_id,
+          contract_type:          form.contract_type,
+          contract_number:        form.contract_number,
+          contract_date:          form.contract_date,
+          lessee_name:            form.lessee_name,
+          lessee_id_number:       `${form.lessee_id_front}-${form.lessee_id_back}`,
+          lessee_phone:           form.lessee_phone || undefined,
+          lessee_email:           form.lessee_email || undefined,
+          deposit_amount:         parseInt(digits(form.deposit_amount), 10) || 0,
+          monthly_rent:           parseInt(digits(form.monthly_rent),   10) || 0,
+          monthly_management_fee: form.monthly_management_fee
+                                    ? (parseInt(digits(form.monthly_management_fee), 10) || 0)
+                                    : undefined,
+          vat_included:           form.vat_included,
+          payment_due_day:        parseInt(form.payment_due_day) || 1,
+          auto_journal_rent:      form.auto_journal_rent,
+          auto_journal_mgmt:      form.auto_journal_mgmt,
+          start_date:             form.start_date,
+          end_date:               form.end_date,
+          notes:                  form.notes || undefined,
         }),
       })
       if (!res.ok) {
@@ -218,10 +255,8 @@ export default function NewContractPage() {
           </DialogHeader>
           <p className="text-xs text-gray-500 -mt-1">
             선택한 계약의 정보를 폼에 붙여넣습니다.
-            <span className="text-amber-600 ml-1">계약번호·계약기간은 초기화되니 새로 입력하세요.</span>
+            <span className="text-amber-600 ml-1">계약일자·계약기간은 초기화되니 새로 입력하세요.</span>
           </p>
-
-          {/* 검색 */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
@@ -231,8 +266,6 @@ export default function NewContractPage() {
               className="pl-9"
             />
           </div>
-
-          {/* 목록 */}
           <div className="overflow-y-auto max-h-[52vh] space-y-2 pr-1">
             {copyLoading ? (
               <p className="text-center text-sm text-gray-400 py-10">불러오는 중...</p>
@@ -248,9 +281,7 @@ export default function NewContractPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm text-gray-900">{c.lessee_name}</p>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                      {c.contract_type}
-                    </span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{c.contract_type}</span>
                     <span className="text-xs text-gray-400">{c.contract_number}</span>
                   </div>
                   {c.property && (
@@ -261,14 +292,11 @@ export default function NewContractPage() {
                   <p className="text-xs text-gray-400 mt-0.5">
                     보증금 {c.deposit_amount.toLocaleString()}원
                     {c.monthly_rent > 0 && ` · 월세 ${c.monthly_rent.toLocaleString()}원`}
+                    {c.monthly_management_fee && c.monthly_management_fee > 0
+                      ? ` · 관리비 ${c.monthly_management_fee.toLocaleString()}원` : ''}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 gap-1"
-                  onClick={() => applyCopy(c)}
-                >
+                <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={() => applyCopy(c)}>
                   <Copy className="w-3.5 h-3.5" />
                   복사
                 </Button>
@@ -289,48 +317,40 @@ export default function NewContractPage() {
           </Link>
           <h2 className="text-xl font-semibold text-gray-900">새 임대계약 등록</h2>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5 text-gray-600"
-          onClick={openCopyDialog}
-        >
+        <Button type="button" variant="outline" size="sm" className="gap-1.5 text-gray-600" onClick={openCopyDialog}>
           <Copy className="w-3.5 h-3.5" />
           기존에서 복사
         </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 계약 기본 정보 */}
+
+        {/* ── 계약 기본 정보 ── */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">계약 기본 정보</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1.5">
-                <Label>부동산 <span className="text-red-500">*</span></Label>
-                <Select value={form.property_id} onValueChange={v => set('property_id', v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="부동산 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}{p.address_road ? ` · ${p.address_road}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="col-span-2 space-y-1.5">
+              <Label>부동산 <span className="text-red-500">*</span></Label>
+              <Select value={form.property_id} onValueChange={v => set('property_id', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="부동산 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}{p.address_road ? ` · ${p.address_road}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>계약유형 <span className="text-red-500">*</span></Label>
-                <Select
-                  value={form.contract_type}
-                  onValueChange={v => set('contract_type', v as ContractType)}
-                >
+                <Select value={form.contract_type} onValueChange={v => set('contract_type', v as ContractType)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="월세">월세</SelectItem>
@@ -341,18 +361,28 @@ export default function NewContractPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>계약 번호 <span className="text-red-500">*</span></Label>
+                <Label>계약번호 <span className="text-red-500">*</span></Label>
                 <Input
                   value={form.contract_number}
                   onChange={e => set('contract_number', e.target.value)}
-                  placeholder="예) 2024-001"
+                  placeholder="예) 2026-01"
+                />
+              </div>
+
+              <div className="col-span-2 space-y-1.5">
+                <Label>계약일자 <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={form.contract_date}
+                  onChange={e => set('contract_date', e.target.value)}
+                  className="w-full"
                 />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 임차인 정보 */}
+        {/* ── 임차인 정보 ── */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">임차인 정보</CardTitle>
@@ -369,12 +399,51 @@ export default function NewContractPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>연락처</Label>
+                <Label>연락처 <span className="text-red-500">*</span></Label>
                 <Input
                   value={form.lessee_phone}
                   onChange={e => set('lessee_phone', e.target.value)}
                   placeholder="010-0000-0000"
                 />
+              </div>
+
+              <div className="col-span-2 space-y-1.5">
+                <Label>주민번호 <span className="text-red-500">*</span></Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    ref={idFrontRef}
+                    type="text"
+                    inputMode="numeric"
+                    value={form.lessee_id_front}
+                    onChange={e => {
+                      const v = digits(e.target.value).slice(0, 6)
+                      set('lessee_id_front', v)
+                      if (v.length === 6) idBackRef.current?.focus()
+                    }}
+                    maxLength={6}
+                    placeholder="생년월일 6자리"
+                    className="w-36 font-mono tracking-widest text-center"
+                  />
+                  <span className="text-gray-500 font-medium select-none">-</span>
+                  <Input
+                    ref={idBackRef}
+                    type="text"
+                    inputMode="numeric"
+                    value={form.lessee_id_back}
+                    onChange={e => {
+                      const v = digits(e.target.value).slice(0, 1)
+                      set('lessee_id_back', v)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Backspace' && !form.lessee_id_back) idFrontRef.current?.focus()
+                    }}
+                    maxLength={1}
+                    placeholder="X"
+                    className="w-12 font-mono text-center"
+                  />
+                  <span className="text-gray-300 font-mono text-sm tracking-widest select-none">●●●●●●</span>
+                </div>
+                <p className="text-xs text-gray-400">생년월일 6자리 + 성별 구분 1자리</p>
               </div>
 
               <div className="col-span-2 space-y-1.5">
@@ -390,7 +459,7 @@ export default function NewContractPage() {
           </CardContent>
         </Card>
 
-        {/* 금액 정보 */}
+        {/* ── 금액 정보 ── */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">금액 정보</CardTitle>
@@ -423,6 +492,19 @@ export default function NewContractPage() {
 
               {!isJeonse && (
                 <div className="space-y-1.5">
+                  <Label>관리비 (원)</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.monthly_management_fee)}
+                    onChange={e => set('monthly_management_fee', digits(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+
+              {!isJeonse && (
+                <div className="space-y-1.5">
                   <Label>납부일</Label>
                   <Select value={form.payment_due_day} onValueChange={v => set('payment_due_day', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -435,7 +517,7 @@ export default function NewContractPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 pt-6">
+              <div className="flex items-center gap-2 pt-2">
                 <input
                   id="vat_included"
                   type="checkbox"
@@ -446,15 +528,57 @@ export default function NewContractPage() {
                 <Label htmlFor="vat_included" className="cursor-pointer">부가세 포함</Label>
               </div>
             </div>
+
+            {/* 수입 자동반영 */}
+            {!isJeonse && (
+              <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-700">수입 자동반영</p>
+                <p className="text-xs text-blue-500">
+                  체크 시 계약 등록과 동시에 분개장에 차변(보통예금)·대변(수익) 초안이 자동 기입됩니다.
+                </p>
+                <div className="flex flex-col gap-2 pt-0.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                      checked={form.auto_journal_rent}
+                      onChange={e => set('auto_journal_rent', e.target.checked)}
+                      disabled={!form.monthly_rent}
+                    />
+                    <span className="text-sm text-gray-700">
+                      월세 자동반영
+                      <span className="text-xs text-gray-400 ml-1">
+                        (차변: 보통예금 / 대변: 임대수익)
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                      checked={form.auto_journal_mgmt}
+                      onChange={e => set('auto_journal_mgmt', e.target.checked)}
+                      disabled={!form.monthly_management_fee}
+                    />
+                    <span className="text-sm text-gray-700">
+                      관리비 자동반영
+                      <span className="text-xs text-gray-400 ml-1">
+                        (차변: 보통예금 / 대변: 관리비수익)
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* 계약 기간 */}
+        {/* ── 계약 기간 ── */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">계약 기간</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>계약 시작일 <span className="text-red-500">*</span></Label>
@@ -464,7 +588,6 @@ export default function NewContractPage() {
                   onChange={e => set('start_date', e.target.value)}
                 />
               </div>
-
               <div className="space-y-1.5">
                 <Label>계약 종료일 <span className="text-red-500">*</span></Label>
                 <Input
@@ -477,7 +600,7 @@ export default function NewContractPage() {
           </CardContent>
         </Card>
 
-        {/* 메모 */}
+        {/* ── 메모 ── */}
         <Card>
           <CardContent className="pt-5 space-y-1.5">
             <Label>메모</Label>

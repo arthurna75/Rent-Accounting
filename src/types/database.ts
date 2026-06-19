@@ -196,6 +196,7 @@ export interface LeaseContract {
   organization_id: string
   property_id: string
   contract_number: string
+  contract_date: string | null
   lessee_name: string
   lessee_id_number: string | null
   lessee_phone: string | null
@@ -209,6 +210,8 @@ export interface LeaseContract {
   vat_included: boolean
   payment_due_day: number
   auto_renewal: boolean
+  auto_journal_rent: boolean
+  auto_journal_mgmt: boolean
   status: ContractStatus
   termination_date: string | null
   termination_reason: string | null
