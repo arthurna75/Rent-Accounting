@@ -3,16 +3,37 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Script from 'next/script'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ArrowLeft, Copy, Search } from 'lucide-react'
+import { ArrowLeft, Copy, MapPin, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { cn } from '@/lib/utils'
+
+// ────────────────────────────────────────
+// 카카오 우편번호 서비스 타입
+// ────────────────────────────────────────
+interface KakaoPostcodeData {
+  roadAddress: string       // 도로명주소
+  jibunAddress: string      // 지번주소
+  zonecode: string          // 우편번호
+  buildingName: string      // 건물명
+  apartment: string         // 아파트 여부 ('Y'|'N')
+  userSelectedType: 'R' | 'J'
+}
+
+declare global {
+  interface Window {
+    daum?: {
+      Postcode: new (opts: { oncomplete: (d: KakaoPostcodeData) => void }) => { open(): void }
+    }
+  }
+}
 
 // ────────────────────────────────────────
 // 타입
@@ -56,6 +77,23 @@ export default function NewPropertyPage() {
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [form, setForm] = useState(INITIAL_FORM)
+  const [kakaoReady, setKakaoReady] = useState(false)
+
+  // ── 카카오 주소 검색 팝업 열기 ──
+  function openAddressSearch() {
+    if (!window.daum?.Postcode) return
+    new window.daum.Postcode({
+      oncomplete(data) {
+        // 도로명주소 우선, 없으면 지번주소
+        const road = data.roadAddress || data.jibunAddress
+        set('address_road', road)
+        // 아파트/건물명이 있으면 상세주소에 자동 제안
+        if (data.buildingName && data.apartment === 'Y') {
+          set('address_detail', data.buildingName)
+        }
+      },
+    }).open()
+  }
 
   // ── 복사 다이얼로그 상태 ──
   const [copyOpen, setCopyOpen] = useState(false)
@@ -163,6 +201,13 @@ export default function NewPropertyPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* 카카오 우편번호 서비스 스크립트 */}
+      <Script
+        src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+        strategy="afterInteractive"
+        onLoad={() => setKakaoReady(true)}
+      />
+
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
@@ -275,17 +320,31 @@ export default function NewPropertyPage() {
 
               <div className="sm:col-span-2 space-y-1.5">
                 <Label htmlFor="address_road">도로명주소 <span className="text-red-500">*</span></Label>
-                <Input
-                  id="address_road"
-                  placeholder="예: 서울특별시 강남구 테헤란로 123"
-                  value={form.address_road}
-                  onChange={e => set('address_road', e.target.value)}
-                  required
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="address_road"
+                    value={form.address_road}
+                    onChange={e => set('address_road', e.target.value)}
+                    placeholder="주소 검색 버튼을 눌러 주세요"
+                    readOnly
+                    className="flex-1 bg-gray-50 cursor-pointer"
+                    onClick={openAddressSearch}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openAddressSearch}
+                    disabled={!kakaoReady}
+                    className="shrink-0 gap-1.5"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    {kakaoReady ? '주소 검색' : '로딩 중...'}
+                  </Button>
+                </div>
               </div>
 
               <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="address_detail">상세주소</Label>
+                <Label htmlFor="address_detail">상세주소 <span className="text-xs text-gray-400">(동·호수 등)</span></Label>
                 <Input
                   id="address_detail"
                   placeholder="예: 101호"
