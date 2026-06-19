@@ -222,3 +222,34 @@ export const SAMPLE_COA = [
   { code: '602', name: '수선유지비',     account_type: '비용', normal_balance: '차변', is_system: true  },
   { code: '603', name: '보험료',         account_type: '비용', normal_balance: '차변', is_system: false },
 ]
+
+// ------ 손익통계 (월별) ------
+const _s = (arr: number[]) => arr.reduce((a, b) => a + b, 0)
+
+const _rRental = [2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 1_580_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000]
+const _rVat    = [80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000]
+const _eDep    = [824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652]
+const _eRepair = [0, 0, 0, 150_000, 0, 0, 0, 0, 0, 0, 0, 410_000]
+const _eIns    = [0, 0, 480_000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+const _revByMonth = _rRental.map((v, i) => v + _rVat[i])
+const _expByMonth = _eDep.map((v, i) => v + _eRepair[i] + _eIns[i])
+
+export const SAMPLE_PL_STATS = {
+  year: new Date().getFullYear(),
+  revenues: [
+    { code: '501', name: '임대수익',      months: _rRental, total: _s(_rRental) },
+    { code: '502', name: '부가가치세수익', months: _rVat,    total: _s(_rVat)    },
+  ],
+  expenses: [
+    { code: '601', name: '감가상각비', months: _eDep,    total: _s(_eDep)    },
+    { code: '602', name: '수선유지비', months: _eRepair, total: _s(_eRepair) },
+    { code: '603', name: '보험료',     months: _eIns,    total: _s(_eIns)    },
+  ],
+  revenue_by_month:    _revByMonth,
+  expense_by_month:    _expByMonth,
+  net_income_by_month: _revByMonth.map((v, i) => v - _expByMonth[i]),
+  total_revenue:    _s(_revByMonth),
+  total_expense:    _s(_expByMonth),
+  total_net_income: _s(_revByMonth) - _s(_expByMonth),
+}

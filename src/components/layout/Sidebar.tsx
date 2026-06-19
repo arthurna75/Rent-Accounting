@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types/database'
 import {
   LayoutDashboard, Building2, FileText, BookOpen,
-  BarChart3, Settings, Calculator, Receipt, List, X,
+  BarChart3, Settings, Calculator, Receipt, List, X, TrendingUp,
 } from 'lucide-react'
 
 interface NavItem {
@@ -24,10 +24,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: '계정과목',    href: '/accounting/chart-of-accounts', icon: List,            roles: ['owner','accountant'] },
   { label: '감가상각',    href: '/accounting/depreciation',      icon: Calculator,      roles: ['owner','accountant'] },
   { label: '간주임대료',  href: '/accounting/deemed-rental',     icon: Receipt,         roles: ['owner','accountant'] },
-  { label: '재무상태표',  href: '/reports/balance-sheet',        icon: BarChart3,       roles: ['owner','accountant','viewer'] },
-  { label: '손익계산서',  href: '/reports/income-statement',     icon: BarChart3,       roles: ['owner','accountant','viewer'] },
-  { label: '시산표',      href: '/reports/trial-balance',        icon: BarChart3,       roles: ['owner','accountant'] },
-  { label: '설정',        href: '/settings',                     icon: Settings,        roles: ['owner'] },
+  { label: '재무상태표',  href: '/reports/balance-sheet',        icon: BarChart3,    roles: ['owner','accountant','viewer'] },
+  { label: '손익계산서',  href: '/reports/income-statement',    icon: BarChart3,    roles: ['owner','accountant','viewer'] },
+  { label: '손익통계',    href: '/reports/pl-stats',            icon: TrendingUp,   roles: ['owner','accountant','viewer'] },
+  { label: '시산표',      href: '/reports/trial-balance',       icon: BarChart3,    roles: ['owner','accountant'] },
+  { label: '설정',        href: '/settings',                    icon: Settings,     roles: ['owner'] },
 ]
 
 interface SidebarProps {
