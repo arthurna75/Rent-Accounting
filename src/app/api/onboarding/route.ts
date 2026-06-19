@@ -48,7 +48,11 @@ export async function POST(req: NextRequest) {
 
   if (orgError) {
     console.error('org insert error:', orgError)
-    return NextResponse.json({ error: orgError.message }, { status: 500 })
+    const isDuplicate = orgError.code === '23505'
+    return NextResponse.json(
+      { error: isDuplicate ? '이미 등록된 이메일로 조직이 존재합니다. 관리자에게 문의하세요.' : orgError.message },
+      { status: isDuplicate ? 409 : 500 },
+    )
   }
 
   // 2. user_profiles 생성
