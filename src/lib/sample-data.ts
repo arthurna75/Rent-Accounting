@@ -227,19 +227,21 @@ export const SAMPLE_COA = [
 const _s = (arr: number[]) => arr.reduce((a, b) => a + b, 0)
 
 const _rRental = [2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 1_580_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000, 2_380_000]
-const _rVat    = [80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000, 80_000]
+// 간주임대료수익: 전세·반전세 보증금 초과분 연간 합산 → 12월 말 일괄 계상
+// 이순신(전세 200M, 306일) 4,876,712 + 최민수(반전세 20M, 275일) 437,260 ≈ 5,314,000
+const _rDeemed = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5_314_000]
 const _eDep    = [824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652, 824_652]
 const _eRepair = [0, 0, 0, 150_000, 0, 0, 0, 0, 0, 0, 0, 410_000]
 const _eIns    = [0, 0, 480_000, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-const _revByMonth = _rRental.map((v, i) => v + _rVat[i])
+const _revByMonth = _rRental.map((v, i) => v + _rDeemed[i])
 const _expByMonth = _eDep.map((v, i) => v + _eRepair[i] + _eIns[i])
 
 export const SAMPLE_PL_STATS = {
   year: new Date().getFullYear(),
   revenues: [
     { code: '501', name: '임대수익',      months: _rRental, total: _s(_rRental) },
-    { code: '502', name: '부가가치세수익', months: _rVat,    total: _s(_rVat)    },
+    { code: '503', name: '간주임대료수익', months: _rDeemed, total: _s(_rDeemed) },
   ],
   expenses: [
     { code: '601', name: '감가상각비', months: _eDep,    total: _s(_eDep)    },

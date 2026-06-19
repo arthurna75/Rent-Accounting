@@ -1,79 +1,123 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ArrowLeft, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import type { JournalEntryType } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
+import { cn } from '@/lib/utils'
 
-interface JournalLine {
-  account_code: string
-  account_name: string
-  debit_amount: string
-  credit_amount: string
+// ────────────────────────────────────────────
+// 타입
+// ────────────────────────────────────────────
+interface Account {
+  code: string
+  name: string
+  account_type: string
 }
 
+interface JournalLine {
+  side: 'debit' | 'credit'
+  account_code: string
+  account_name: string
+  amount: string
+}
+
+// ────────────────────────────────────────────
+// 상수
+// ────────────────────────────────────────────
 const ENTRY_TYPES: JournalEntryType[] = [
   '일반', '임대수익', '보증금수령', '보증금반환', '감가상각', '간주임대료', '세금', '관리비',
 ]
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
-const EMPTY_LINE: JournalLine = {
-  account_code: '',
-  account_name: '',
-  debit_amount: '',
-  credit_amount: '',
+const EMPTY_LINE = (side: 'debit' | 'credit'): JournalLine => ({
+  side, account_code: '', account_name: '', amount: '',
+})
+
+function fmt(n: number) {
+  return n.toLocaleString('ko-KR')
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString('ko-KR')
-}
-
+// ────────────────────────────────────────────
+// 컴포넌트
+// ────────────────────────────────────────────
 export default function NewJournalEntryPage() {
   const router = useRouter()
 
+  // 헤더 상태
   const [entryDate, setEntryDate] = useState(TODAY)
   const [entryType, setEntryType] = useState<JournalEntryType>('일반')
   const [description, setDescription] = useState('')
+
+  // 분개 라인 (차변 1행 + 대변 1행으로 시작)
   const [lines, setLines] = useState<JournalLine[]>([
-    { ...EMPTY_LINE },
-    { ...EMPTY_LINE },
+    EMPTY_LINE('debit'),
+    EMPTY_LINE('credit'),
   ])
+
+  // 계정과목 목록
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [acctMap, setAcctMap] = useState<Record<string, string>>({}) // code → name
+
+  // UI 상태
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
-  function updateLine(index: number, field: keyof JournalLine, value: string) {
-    setLines(prev => {
-      const next = [...prev]
-      next[index] = { ...next[index], [field]: value }
-      return next
-    })
+  // 계정과목 로드
+  useEffect(() => {
+    fetch('/api/accounting/chart-of-accounts')
+      .then(r => r.json())
+      .then(json => {
+        const list: Account[] = json.data ?? []
+        setAccounts(list)
+        const map: Record<string, string> = {}
+        list.forEach(a => { map[a.code] = a.name })
+        setAcctMap(map)
+      })
+      .catch(() => {})
+  }, [])
+
+  // ── 라인 조작 ──
+  function setLineSide(idx: number, side: 'debit' | 'credit') {
+    setLines(prev => prev.map((l, i) => i === idx ? { ...l, side } : l))
+  }
+
+  function setLineCode(idx: number, code: string) {
+    setLines(prev => prev.map((l, i) =>
+      i === idx ? { ...l, account_code: code, account_name: acctMap[code] ?? l.account_name } : l,
+    ))
+  }
+
+  function setLineAmount(idx: number, val: string) {
+    setLines(prev => prev.map((l, i) => i === idx ? { ...l, amount: val } : l))
   }
 
   function addLine() {
-    setLines(prev => [...prev, { ...EMPTY_LINE }])
+    setLines(prev => [...prev, EMPTY_LINE('debit')])
   }
 
-  function removeLine(index: number) {
+  function removeLine(idx: number) {
     if (lines.length <= 2) return
-    setLines(prev => prev.filter((_, i) => i !== index))
+    setLines(prev => prev.filter((_, i) => i !== idx))
   }
 
-  const totalDebit = lines.reduce((sum, l) => sum + (parseFloat(l.debit_amount) || 0), 0)
-  const totalCredit = lines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0)
-  const isBalanced = totalDebit > 0 && Math.abs(totalDebit - totalCredit) < 0.01
+  // ── 합계 계산 ──
+  const totalDebit  = lines.reduce((s, l) => l.side === 'debit'  ? s + (parseFloat(l.amount) || 0) : s, 0)
+  const totalCredit = lines.reduce((s, l) => l.side === 'credit' ? s + (parseFloat(l.amount) || 0) : s, 0)
+  const diff = Math.abs(totalDebit - totalCredit)
+  const isBalanced = totalDebit > 0 && diff < 0.01
 
+  // ── 제출 ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -81,23 +125,19 @@ export default function NewJournalEntryPage() {
     const { data: { user } } = await createClient().auth.getUser()
     if (!user) { setShowLoginModal(true); return }
 
-    if (!entryDate) { setError('전표일자를 입력해 주세요.'); return }
+    if (!entryDate)        { setError('전표일자를 입력해 주세요.'); return }
     if (!description.trim()) { setError('적요를 입력해 주세요.'); return }
 
-    const filledLines = lines.filter(l => l.account_code.trim() || l.debit_amount || l.credit_amount)
-    if (filledLines.length < 2) { setError('분개 라인을 최소 2개 입력해 주세요.'); return }
+    const filled = lines.filter(l => l.account_code.trim() && l.amount)
+    if (filled.length < 2) { setError('계정과목과 금액이 입력된 행이 최소 2개 필요합니다.'); return }
 
-    const debit = filledLines.reduce((sum, l) => sum + (parseFloat(l.debit_amount) || 0), 0)
-    const credit = filledLines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0)
-
-    if (Math.abs(debit - credit) >= 0.01) {
-      setError(`차변합계(${formatNumber(debit)}원)와 대변합계(${formatNumber(credit)}원)가 일치하지 않습니다. 복식부기는 반드시 대차가 일치해야 합니다.`)
+    const d = filled.reduce((s, l) => l.side === 'debit'  ? s + (parseFloat(l.amount) || 0) : s, 0)
+    const c = filled.reduce((s, l) => l.side === 'credit' ? s + (parseFloat(l.amount) || 0) : s, 0)
+    if (Math.abs(d - c) >= 0.01) {
+      setError(`대차 불일치: 차변 합계 ${fmt(d)}원 / 대변 합계 ${fmt(c)}원 (차이 ${fmt(Math.abs(d - c))}원). 복식부기는 차변과 대변이 반드시 일치해야 합니다.`)
       return
     }
-    if (debit === 0) {
-      setError('금액을 입력해 주세요.')
-      return
-    }
+    if (d === 0) { setError('금액을 입력해 주세요.'); return }
 
     setSubmitting(true)
     try {
@@ -108,16 +148,15 @@ export default function NewJournalEntryPage() {
           entry_date: entryDate,
           entry_type: entryType,
           description: description.trim(),
-          lines: filledLines.map(l => ({
+          lines: filled.map(l => ({
             account_code: l.account_code.trim(),
             account_name: l.account_name.trim() || l.account_code.trim(),
-            debit_amount: parseFloat(l.debit_amount) || 0,
-            credit_amount: parseFloat(l.credit_amount) || 0,
+            debit_amount:  l.side === 'debit'  ? parseFloat(l.amount) || 0 : 0,
+            credit_amount: l.side === 'credit' ? parseFloat(l.amount) || 0 : 0,
           })),
           auto_post: false,
         }),
       })
-
       if (!res.ok) {
         const json = await res.json()
         const msg = json.error?.fieldErrors
@@ -125,7 +164,6 @@ export default function NewJournalEntryPage() {
           : json.error ?? '등록 실패'
         throw new Error(msg)
       }
-
       router.push('/accounting/journal')
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
@@ -134,6 +172,9 @@ export default function NewJournalEntryPage() {
     }
   }
 
+  // ── 렌더 ──
+  const hasAmount = totalDebit > 0 || totalCredit > 0
+
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <LoginModal
@@ -141,7 +182,8 @@ export default function NewJournalEntryPage() {
         onOpenChange={setShowLoginModal}
         description="전표를 등록하려면 로그인이 필요합니다."
       />
-      {/* Header */}
+
+      {/* 헤더 */}
       <div className="flex items-center gap-3">
         <Link href="/accounting/journal">
           <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
@@ -161,9 +203,7 @@ export default function NewJournalEntryPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="entry_date">
-                  전표일자 <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="entry_date">전표일자 <span className="text-red-500">*</span></Label>
                 <Input
                   id="entry_date"
                   type="date"
@@ -171,30 +211,17 @@ export default function NewJournalEntryPage() {
                   onChange={e => setEntryDate(e.target.value)}
                 />
               </div>
-
               <div className="space-y-1.5">
-                <Label>
-                  분개유형 <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={entryType}
-                  onValueChange={v => setEntryType(v as JournalEntryType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Label>분개유형 <span className="text-red-500">*</span></Label>
+                <Select value={entryType} onValueChange={v => setEntryType(v as JournalEntryType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ENTRY_TYPES.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
+                    {ENTRY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="description">
-                  적요 <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="description">적요 <span className="text-red-500">*</span></Label>
                 <Input
                   id="description"
                   value={description}
@@ -217,95 +244,152 @@ export default function NewJournalEntryPage() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Column headers */}
-            <div className="grid grid-cols-[1fr_1fr_120px_120px_36px] gap-2 px-1">
-              <span className="text-xs font-medium text-gray-500">계정코드</span>
+          <CardContent className="space-y-2">
+            {/* 컬럼 헤더 */}
+            <div className="grid grid-cols-[88px_1fr_130px_32px] gap-2 px-1 pb-1 border-b">
+              <span className="text-xs font-medium text-gray-500">구분</span>
               <span className="text-xs font-medium text-gray-500">계정과목</span>
-              <span className="text-xs font-medium text-gray-500 text-right">차변금액 (원)</span>
-              <span className="text-xs font-medium text-gray-500 text-right">대변금액 (원)</span>
+              <span className="text-xs font-medium text-gray-500 text-right">금액 (원)</span>
               <span />
             </div>
 
+            {/* 분개 행들 */}
             {lines.map((line, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_120px_120px_36px] gap-2 items-center">
-                <Input
-                  value={line.account_code}
-                  onChange={e => updateLine(i, 'account_code', e.target.value)}
-                  placeholder="예) 1010"
-                />
-                <Input
-                  value={line.account_name}
-                  onChange={e => updateLine(i, 'account_name', e.target.value)}
-                  placeholder="예) 현금"
-                />
+              <div key={i} className="grid grid-cols-[88px_1fr_130px_32px] gap-2 items-center">
+                {/* 차변/대변 토글 */}
+                <div className="flex h-9 rounded-md border overflow-hidden text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setLineSide(i, 'debit')}
+                    className={cn(
+                      'flex-1 transition-colors',
+                      line.side === 'debit'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-400 hover:text-blue-600',
+                    )}
+                  >
+                    차변
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLineSide(i, 'credit')}
+                    className={cn(
+                      'flex-1 border-l transition-colors',
+                      line.side === 'credit'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-white text-gray-400 hover:text-red-500',
+                    )}
+                  >
+                    대변
+                  </button>
+                </div>
+
+                {/* 계정과목 선택 */}
+                {accounts.length > 0 ? (
+                  <select
+                    value={line.account_code}
+                    onChange={e => setLineCode(i, e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">계정 선택...</option>
+                    {accounts.map(a => (
+                      <option key={a.code} value={a.code}>
+                        {a.code} — {a.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={line.account_code}
+                      onChange={e => setLineCode(i, e.target.value)}
+                      placeholder="코드"
+                      className="w-20 shrink-0"
+                    />
+                    <div className="flex-1 h-9 flex items-center px-3 rounded-md border border-input bg-gray-50 text-sm text-gray-500 truncate">
+                      {line.account_name || <span className="text-gray-300">계정과목명</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* 금액 */}
                 <Input
                   type="number"
                   min="0"
                   step="1"
-                  value={line.debit_amount}
-                  onChange={e => updateLine(i, 'debit_amount', e.target.value)}
+                  value={line.amount}
+                  onChange={e => setLineAmount(i, e.target.value)}
                   placeholder="0"
                   className="text-right"
                 />
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={line.credit_amount}
-                  onChange={e => updateLine(i, 'credit_amount', e.target.value)}
-                  placeholder="0"
-                  className="text-right"
-                />
-                <Button
+
+                {/* 삭제 */}
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="p-0 h-8 w-8 text-gray-400 hover:text-red-500"
                   onClick={() => removeLine(i)}
                   disabled={lines.length <= 2}
+                  className="h-8 w-8 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-0 disabled:pointer-events-none transition-colors"
                   title="행 삭제"
                 >
                   <Trash2 className="w-4 h-4" />
-                </Button>
+                </button>
               </div>
             ))}
 
-            {/* 합계 행 */}
-            <div className="border-t pt-3 mt-1">
-              <div className="grid grid-cols-[1fr_1fr_120px_120px_36px] gap-2 items-center">
-                <div className="col-span-2 text-sm font-medium text-gray-700 text-right pr-2">합계</div>
-                <div className={`text-right text-sm font-semibold px-3 py-2 rounded ${isBalanced ? 'text-blue-700 bg-blue-50' : 'text-gray-800'}`}>
-                  {formatNumber(totalDebit)}
+            {/* 대차 합계 */}
+            <div className={cn(
+              'mt-3 rounded-lg px-4 py-3 border',
+              !hasAmount ? 'bg-gray-50 border-gray-200'
+                : isBalanced ? 'bg-green-50 border-green-200'
+                : 'bg-amber-50 border-amber-200',
+            )}>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-5 text-sm">
+                  <div>
+                    <span className="text-gray-500">차변 합계</span>
+                    <span className="ml-2 font-semibold text-blue-700 tabular-nums">
+                      {fmt(totalDebit)}원
+                    </span>
+                  </div>
+                  <span className="text-gray-300">|</span>
+                  <div>
+                    <span className="text-gray-500">대변 합계</span>
+                    <span className="ml-2 font-semibold text-red-600 tabular-nums">
+                      {fmt(totalCredit)}원
+                    </span>
+                  </div>
                 </div>
-                <div className={`text-right text-sm font-semibold px-3 py-2 rounded ${isBalanced ? 'text-blue-700 bg-blue-50' : 'text-gray-800'}`}>
-                  {formatNumber(totalCredit)}
-                </div>
-                <div />
+
+                {isBalanced && (
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-green-700">
+                    <CheckCircle2 className="w-4 h-4" />
+                    대차 일치
+                  </div>
+                )}
+                {hasAmount && !isBalanced && (
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700">
+                    <AlertTriangle className="w-4 h-4" />
+                    차이 {fmt(diff)}원
+                  </div>
+                )}
               </div>
-              {totalDebit > 0 && !isBalanced && (
-                <p className="text-xs text-amber-600 mt-2 text-right pr-9">
-                  차이: {formatNumber(Math.abs(totalDebit - totalCredit))}원 — 차변과 대변이 일치해야 합니다.
-                </p>
-              )}
-              {isBalanced && (
-                <p className="text-xs text-green-600 mt-2 text-right pr-9">
-                  차변과 대변이 일치합니다.
-                </p>
-              )}
             </div>
           </CardContent>
         </Card>
 
+        {/* 오류 메시지 */}
         {error && (
-          <p className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-md">{error}</p>
+          <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
         )}
 
         <div className="flex justify-end gap-2 pb-6">
           <Link href="/accounting/journal">
             <Button type="button" variant="outline">취소</Button>
           </Link>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || !isBalanced}>
             {submitting ? '등록 중...' : '전표 등록'}
           </Button>
         </div>
