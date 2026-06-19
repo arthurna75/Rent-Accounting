@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,34 +33,25 @@ const ENTRY_TYPES: JournalEntryType[] = [
 
 const EVIDENCE_TYPES: EvidenceType[] = ['현금영수증', '세금계산서', '영수증', '기타']
 
-const TODAY = new Date().toISOString().slice(0, 10)
-
-const EMPTY_LINE = (side: 'debit' | 'credit'): JournalLine => ({
-  side, account_code: '', account_name: '', amount: '',
-})
-
 function digits(v: string) { return v.replace(/\D/g, '') }
 function commaFmt(v: string) {
   const n = digits(v)
   return n ? Number(n).toLocaleString('ko-KR') : ''
 }
 function parseAmt(v: string) { return parseInt(digits(v), 10) || 0 }
-
 function fmt(n: number) { return n.toLocaleString('ko-KR') }
 
-export default function NewJournalEntryPage() {
+export default function EditJournalEntryPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const router = useRouter()
 
-  const [entryDate, setEntryDate] = useState(TODAY)
+  const [loading, setLoading] = useState(true)
+  const [entryDate, setEntryDate] = useState('')
   const [entryType, setEntryType] = useState<JournalEntryType>('일반')
   const [description, setDescription] = useState('')
   const [vendorId, setVendorId] = useState<string>('')
   const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>('')
-
-  const [lines, setLines] = useState<JournalLine[]>([
-    EMPTY_LINE('debit'),
-    EMPTY_LINE('credit'),
-  ])
+  const [lines, setLines] = useState<JournalLine[]>([])
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [acctMap, setAcctMap] = useState<Record<string, string>>({})
@@ -71,22 +62,50 @@ export default function NewJournalEntryPage() {
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   useEffect(() => {
-    fetch('/api/accounting/chart-of-accounts')
-      .then(r => r.json())
-      .then(json => {
-        const list: Account[] = json.data ?? []
-        setAccounts(list)
-        const map: Record<string, string> = {}
-        list.forEach(a => { map[a.code] = a.name })
-        setAcctMap(map)
-      })
-      .catch(() => {})
+    Promise.all([
+      fetch(`/api/accounting/journal-entries/${id}`).then(r => r.json()),
+      fetch('/api/accounting/chart-of-accounts').then(r => r.json()),
+      fetch('/api/vendors').then(r => r.json()),
+    ]).then(([entryJson, acctJson, vendorJson]) => {
+      // 계정과목 맵 구성
+      const list: Account[] = acctJson.data ?? []
+      setAccounts(list)
+      const map: Record<string, string> = {}
+      list.forEach((a: Account) => { map[a.code] = a.name })
+      setAcctMap(map)
 
-    fetch('/api/vendors')
-      .then(r => r.json())
-      .then(json => setVendors(json.data ?? []))
-      .catch(() => {})
-  }, [])
+      setVendors(vendorJson.data ?? [])
+
+      // 전표 데이터 세팅
+      const entry = entryJson.data
+      if (!entry) { setError('전표를 찾을 수 없습니다.'); setLoading(false); return }
+      if (entry.status !== 'draft') { setError('draft 상태의 전표만 수정할 수 있습니다.'); setLoading(false); return }
+
+      setEntryDate(entry.entry_date)
+      setEntryType(entry.entry_type)
+      setDescription(entry.description)
+      setVendorId(entry.vendor_id ?? '')
+      setEvidenceType(entry.evidence_type ?? '')
+
+      const entryLines: JournalLine[] = (entry.lines ?? [])
+        .sort((a: { line_order: number }, b: { line_order: number }) => a.line_order - b.line_order)
+        .map((l: { debit_amount: number; credit_amount: number; account?: { code: string; name: string } | null }) => ({
+          side: l.debit_amount > 0 ? 'debit' : 'credit',
+          account_code: l.account?.code ?? '',
+          account_name: l.account?.name ?? '',
+          amount: commaFmt(String(l.debit_amount > 0 ? l.debit_amount : l.credit_amount)),
+        }))
+
+      setLines(entryLines.length >= 2 ? entryLines : [
+        { side: 'debit', account_code: '', account_name: '', amount: '' },
+        { side: 'credit', account_code: '', account_name: '', amount: '' },
+      ])
+      setLoading(false)
+    }).catch(() => {
+      setError('데이터를 불러오는 데 실패했습니다.')
+      setLoading(false)
+    })
+  }, [id])
 
   function setLineSide(idx: number, side: 'debit' | 'credit') {
     setLines(prev => prev.map((l, i) => i === idx ? { ...l, side } : l))
@@ -103,7 +122,7 @@ export default function NewJournalEntryPage() {
   }
 
   function addLine() {
-    setLines(prev => [...prev, EMPTY_LINE('debit')])
+    setLines(prev => [...prev, { side: 'debit', account_code: '', account_name: '', amount: '' }])
   }
 
   function removeLine(idx: number) {
@@ -115,6 +134,7 @@ export default function NewJournalEntryPage() {
   const totalCredit = lines.reduce((s, l) => l.side === 'credit' ? s + parseAmt(l.amount) : s, 0)
   const diff = Math.abs(totalDebit - totalCredit)
   const isBalanced = totalDebit > 0 && diff < 0.01
+  const hasAmount = totalDebit > 0 || totalCredit > 0
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -132,17 +152,18 @@ export default function NewJournalEntryPage() {
     const d = filled.reduce((s, l) => l.side === 'debit'  ? s + parseAmt(l.amount) : s, 0)
     const c = filled.reduce((s, l) => l.side === 'credit' ? s + parseAmt(l.amount) : s, 0)
     if (Math.abs(d - c) >= 0.01) {
-      setError(`대차 불일치: 차변 합계 ${fmt(d)}원 / 대변 합계 ${fmt(c)}원 (차이 ${fmt(Math.abs(d - c))}원). 복식부기는 차변과 대변이 반드시 일치해야 합니다.`)
+      setError(`대차 불일치: 차변 합계 ${fmt(d)}원 / 대변 합계 ${fmt(c)}원 (차이 ${fmt(Math.abs(d - c))}원).`)
       return
     }
     if (d === 0) { setError('금액을 입력해 주세요.'); return }
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/accounting/journal-entries', {
-        method: 'POST',
+      const res = await fetch(`/api/accounting/journal-entries/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'update',
           entry_date: entryDate,
           entry_type: entryType,
           description: description.trim(),
@@ -153,17 +174,17 @@ export default function NewJournalEntryPage() {
             debit_amount:  l.side === 'debit'  ? parseAmt(l.amount) : 0,
             credit_amount: l.side === 'credit' ? parseAmt(l.amount) : 0,
           })),
-          auto_post: false,
         }),
       })
       if (!res.ok) {
         const json = await res.json()
         const msg = json.error?.fieldErrors
           ? Object.values(json.error.fieldErrors as Record<string, string[]>).flat().join(', ')
-          : json.error ?? '등록 실패'
+          : json.error ?? '수정 실패'
         throw new Error(msg)
       }
       router.push('/accounting/journal')
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
     } finally {
@@ -171,14 +192,29 @@ export default function NewJournalEntryPage() {
     }
   }
 
-  const hasAmount = totalDebit > 0 || totalCredit > 0
+  if (loading) {
+    return <div className="flex items-center justify-center py-20 text-gray-400">불러오는 중...</div>
+  }
+
+  if (error && lines.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-4">
+        <Link href="/accounting/journal">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
+            <ArrowLeft className="w-4 h-4" />분개장
+          </Button>
+        </Link>
+        <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       <LoginModal
         open={showLoginModal}
         onOpenChange={setShowLoginModal}
-        description="전표를 등록하려면 로그인이 필요합니다."
+        description="전표를 수정하려면 로그인이 필요합니다."
       />
 
       <div className="flex items-center gap-3">
@@ -188,11 +224,10 @@ export default function NewJournalEntryPage() {
             분개장
           </Button>
         </Link>
-        <h2 className="text-xl font-semibold text-gray-900">전표 등록</h2>
+        <h2 className="text-xl font-semibold text-gray-900">전표 수정</h2>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 기본 정보 */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">기본 정보</CardTitle>
@@ -254,7 +289,6 @@ export default function NewJournalEntryPage() {
           </CardContent>
         </Card>
 
-        {/* 분개 라인 */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -276,28 +310,12 @@ export default function NewJournalEntryPage() {
             {lines.map((line, i) => (
               <div key={i} className="grid grid-cols-[88px_1fr_140px_32px] gap-2 items-center">
                 <div className="flex h-9 rounded-md border overflow-hidden text-xs font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => setLineSide(i, 'debit')}
-                    className={cn(
-                      'flex-1 transition-colors',
-                      line.side === 'debit'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-400 hover:text-blue-600',
-                    )}
-                  >
+                  <button type="button" onClick={() => setLineSide(i, 'debit')}
+                    className={cn('flex-1 transition-colors', line.side === 'debit' ? 'bg-blue-600 text-white' : 'bg-white text-gray-400 hover:text-blue-600')}>
                     차변
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setLineSide(i, 'credit')}
-                    className={cn(
-                      'flex-1 border-l transition-colors',
-                      line.side === 'credit'
-                        ? 'bg-red-500 text-white'
-                        : 'bg-white text-gray-400 hover:text-red-500',
-                    )}
-                  >
+                  <button type="button" onClick={() => setLineSide(i, 'credit')}
+                    className={cn('flex-1 border-l transition-colors', line.side === 'credit' ? 'bg-red-500 text-white' : 'bg-white text-gray-400 hover:text-red-500')}>
                     대변
                   </button>
                 </div>
@@ -310,23 +328,11 @@ export default function NewJournalEntryPage() {
                   >
                     <option value="">계정 선택...</option>
                     {accounts.map(a => (
-                      <option key={a.code} value={a.code}>
-                        {a.code} — {a.name}
-                      </option>
+                      <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
                     ))}
                   </select>
                 ) : (
-                  <div className="flex gap-1.5">
-                    <Input
-                      value={line.account_code}
-                      onChange={e => setLineCode(i, e.target.value)}
-                      placeholder="코드"
-                      className="w-20 shrink-0"
-                    />
-                    <div className="flex-1 h-9 flex items-center px-3 rounded-md border border-input bg-gray-50 text-sm text-gray-500 truncate">
-                      {line.account_name || <span className="text-gray-300">계정과목명</span>}
-                    </div>
-                  </div>
+                  <Input value={line.account_code} onChange={e => setLineCode(i, e.target.value)} placeholder="코드" />
                 )}
 
                 <Input
@@ -343,14 +349,12 @@ export default function NewJournalEntryPage() {
                   onClick={() => removeLine(i)}
                   disabled={lines.length <= 2}
                   className="h-8 w-8 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-0 disabled:pointer-events-none transition-colors"
-                  title="행 삭제"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ))}
 
-            {/* 대차 합계 */}
             <div className={cn(
               'mt-3 rounded-lg px-4 py-3 border',
               !hasAmount ? 'bg-gray-50 border-gray-200'
@@ -361,29 +365,22 @@ export default function NewJournalEntryPage() {
                 <div className="flex items-center gap-5 text-sm">
                   <div>
                     <span className="text-gray-500">차변 합계</span>
-                    <span className="ml-2 font-semibold text-blue-700 tabular-nums">
-                      {fmt(totalDebit)}원
-                    </span>
+                    <span className="ml-2 font-semibold text-blue-700 tabular-nums">{fmt(totalDebit)}원</span>
                   </div>
                   <span className="text-gray-300">|</span>
                   <div>
                     <span className="text-gray-500">대변 합계</span>
-                    <span className="ml-2 font-semibold text-red-600 tabular-nums">
-                      {fmt(totalCredit)}원
-                    </span>
+                    <span className="ml-2 font-semibold text-red-600 tabular-nums">{fmt(totalCredit)}원</span>
                   </div>
                 </div>
-
                 {isBalanced && (
                   <div className="flex items-center gap-1.5 text-sm font-medium text-green-700">
-                    <CheckCircle2 className="w-4 h-4" />
-                    대차 일치
+                    <CheckCircle2 className="w-4 h-4" />대차 일치
                   </div>
                 )}
                 {hasAmount && !isBalanced && (
                   <div className="flex items-center gap-1.5 text-sm font-medium text-amber-700">
-                    <AlertTriangle className="w-4 h-4" />
-                    차이 {fmt(diff)}원
+                    <AlertTriangle className="w-4 h-4" />차이 {fmt(diff)}원
                   </div>
                 )}
               </div>
@@ -403,7 +400,7 @@ export default function NewJournalEntryPage() {
             <Button type="button" variant="outline">취소</Button>
           </Link>
           <Button type="submit" disabled={submitting || !isBalanced}>
-            {submitting ? '등록 중...' : '전표 등록'}
+            {submitting ? '수정 중...' : '전표 수정'}
           </Button>
         </div>
       </form>

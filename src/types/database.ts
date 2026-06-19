@@ -9,7 +9,8 @@ export type RentalType = '주택' | '상가' | '혼합'
 export type PropertyType = '아파트' | '다세대' | '단독주택' | '상가' | '오피스텔' | '근린생활시설' | '기타'
 export type ContractType = '월세' | '전세' | '반전세'
 export type ContractStatus = 'draft' | 'active' | 'expired' | 'terminated'
-export type JournalEntryType = '일반' | '임대수익' | '보증금수령' | '보증금반환' | '감가상각' | '간주임대료' | '세금' | '관리비'
+export type JournalEntryType = '일반' | '임대수익' | '보증금수령' | '보증금반환' | '감가상각' | '간주임대료' | '세금' | '관리비' | '비용지출'
+export type EvidenceType = '현금영수증' | '세금계산서' | '영수증' | '기타'
 export type JournalEntryStatus = 'draft' | 'posted' | 'reversed'
 export type UserRole = 'owner' | 'accountant' | 'viewer'
 export type SubscriptionPlan = 'basic' | 'pro' | 'enterprise'
@@ -78,6 +79,14 @@ export interface Database {
         Insert: Partial<Omit<FiscalYear, 'id' | 'created_at'>>
         Update: Partial<Omit<FiscalYear, 'id' | 'created_at'>>
         Relationships: []
+      }
+      vendors: {
+        Row: AsRow<Vendor>
+        Insert: Partial<Omit<Vendor, 'id' | 'created_at' | 'updated_at'>>
+        Update: Partial<Omit<Vendor, 'id' | 'created_at'>>
+        Relationships: [
+          { foreignKeyName: "vendors_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }
+        ]
       }
       journal_entries: {
         Row: AsRow<JournalEntry>
@@ -281,6 +290,17 @@ export interface FiscalYear {
   created_at: string
 }
 
+export interface Vendor {
+  id: string
+  organization_id: string
+  name: string
+  business_number: string | null
+  memo: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface JournalEntry {
   id: string
   organization_id: string
@@ -289,6 +309,8 @@ export interface JournalEntry {
   entry_date: string
   description: string
   entry_type: JournalEntryType
+  vendor_id: string | null
+  evidence_type: EvidenceType | null
   reference_id: string | null
   reference_type: string | null
   status: JournalEntryStatus
@@ -301,6 +323,7 @@ export interface JournalEntry {
   updated_at: string
   // Joins
   lines?: JournalEntryLine[]
+  vendor?: Vendor | null
 }
 
 export interface JournalEntryLine {
