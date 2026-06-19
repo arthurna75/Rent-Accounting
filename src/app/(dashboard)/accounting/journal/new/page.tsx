@@ -12,6 +12,8 @@ import {
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import type { JournalEntryType } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
+import { LoginModal } from '@/components/auth/LoginModal'
 
 interface JournalLine {
   account_code: string
@@ -49,6 +51,7 @@ export default function NewJournalEntryPage() {
   ])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
 
   function updateLine(index: number, field: keyof JournalLine, value: string) {
     setLines(prev => {
@@ -74,6 +77,9 @@ export default function NewJournalEntryPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    const { data: { user } } = await createClient().auth.getUser()
+    if (!user) { setShowLoginModal(true); return }
 
     if (!entryDate) { setError('전표일자를 입력해 주세요.'); return }
     if (!description.trim()) { setError('적요를 입력해 주세요.'); return }
@@ -130,6 +136,11 @@ export default function NewJournalEntryPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
+      <LoginModal
+        open={showLoginModal}
+        onOpenChange={setShowLoginModal}
+        description="전표를 등록하려면 로그인이 필요합니다."
+      />
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/accounting/journal">

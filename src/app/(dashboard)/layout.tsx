@@ -7,11 +7,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 비로그인: 예시 모드로 정상 레이아웃 렌더
+  // 비로그인: 예시 모드로 정상 레이아웃 렌더 (전체 메뉴 노출)
   if (!user) {
     return (
       <div className="flex h-screen bg-gray-50">
-        <Sidebar isSampleMode />
+        <Sidebar isSampleMode isGuest />
         <div className="flex flex-col flex-1 overflow-hidden">
           <Header user={null} organization="예시 데이터" />
           <main className="flex-1 overflow-y-auto p-6">

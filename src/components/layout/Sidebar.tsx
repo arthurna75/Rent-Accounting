@@ -33,11 +33,13 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   role?: UserRole
   isSampleMode?: boolean
+  isGuest?: boolean
 }
 
-export function Sidebar({ role = 'viewer', isSampleMode = false }: SidebarProps) {
+export function Sidebar({ role = 'viewer', isSampleMode = false, isGuest = false }: SidebarProps) {
   const pathname = usePathname()
-  const items = NAV_ITEMS.filter(i => i.roles.includes(role))
+  // 비로그인 게스트는 전체 메뉴 노출, 로그인 시 역할 기반 필터
+  const items = isGuest ? NAV_ITEMS : NAV_ITEMS.filter(i => i.roles.includes(role))
 
   return (
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">

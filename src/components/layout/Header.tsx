@@ -9,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Bell, LogOut, User, LogIn } from 'lucide-react'
+import { Bell, LogOut, User, LogIn, UserPlus } from 'lucide-react'
 import { LoginModal } from '@/components/auth/LoginModal'
 
 interface HeaderProps {
@@ -20,7 +20,11 @@ interface HeaderProps {
 export function Header({ user, organization }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
-  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [authTab, setAuthTab] = useState<'login' | 'register'>('login')
+  const [showAuthModal, setShowAuthModal] = useState(false)
+
+  function openLogin() { setAuthTab('login'); setShowAuthModal(true) }
+  function openRegister() { setAuthTab('register'); setShowAuthModal(true) }
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -35,7 +39,7 @@ export function Header({ user, organization }: HeaderProps) {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {user ? (
           <>
             <Button variant="ghost" size="icon" className="relative">
@@ -68,20 +72,20 @@ export function Header({ user, organization }: HeaderProps) {
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setShowLoginModal(true)}
-            >
+            <LoginModal
+              open={showAuthModal}
+              onOpenChange={setShowAuthModal}
+              description="로그인하여 데이터를 저장하고 관리하세요."
+              defaultTab={authTab}
+            />
+            <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600" onClick={openLogin}>
               <LogIn className="w-4 h-4" />
               로그인
             </Button>
-            <LoginModal
-              open={showLoginModal}
-              onOpenChange={setShowLoginModal}
-              description="로그인하여 데이터를 저장하고 관리하세요."
-            />
+            <Button size="sm" className="gap-1.5" onClick={openRegister}>
+              <UserPlus className="w-4 h-4" />
+              무료 가입
+            </Button>
           </>
         )}
       </div>

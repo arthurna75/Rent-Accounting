@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { GuestSettingsPrompt } from './GuestSettingsPrompt'
 import type { Organization, UserProfile, SubscriptionPlan, UserRole } from '@/types/database'
 
 const RENTAL_TYPE_LABEL: Record<string, string> = {
@@ -34,7 +35,9 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+
+  // 비로그인: 게스트 안내 화면
+  if (!user) return <GuestSettingsPrompt />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -68,28 +71,13 @@ export default async function SettingsPage() {
         <CardContent>
           <dl>
             <InfoRow label="상호명" value={org.name} />
-            <InfoRow
-              label="사업자등록번호"
-              value={org.business_number ?? undefined}
-            />
+            <InfoRow label="사업자등록번호" value={org.business_number ?? undefined} />
             <InfoRow label="대표자명" value={org.owner_name} />
             <InfoRow label="이메일" value={org.email} />
-            <InfoRow
-              label="연락처"
-              value={org.phone ?? undefined}
-            />
-            <InfoRow
-              label="주소"
-              value={org.address ?? undefined}
-            />
-            <InfoRow
-              label="임대 유형"
-              value={RENTAL_TYPE_LABEL[org.rental_type] ?? org.rental_type}
-            />
-            <InfoRow
-              label="회계연도 시작월"
-              value={`${org.fiscal_year_start_month}월`}
-            />
+            <InfoRow label="연락처" value={org.phone ?? undefined} />
+            <InfoRow label="주소" value={org.address ?? undefined} />
+            <InfoRow label="임대 유형" value={RENTAL_TYPE_LABEL[org.rental_type] ?? org.rental_type} />
+            <InfoRow label="회계연도 시작월" value={`${org.fiscal_year_start_month}월`} />
           </dl>
         </CardContent>
       </Card>
