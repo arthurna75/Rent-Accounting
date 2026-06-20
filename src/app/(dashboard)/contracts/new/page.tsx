@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeft, Copy, Search } from 'lucide-react'
 import Link from 'next/link'
+import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 
 // ────────────────────────────────────────
 // 타입
@@ -101,9 +102,10 @@ export default function NewContractPage() {
 
   const [properties,     setProperties]     = useState<Property[]>([])
   const [form,           setForm]           = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
-  const [submitting,     setSubmitting]     = useState(false)
-  const [error,          setError]          = useState<string | null>(null)
-  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [submitting,      setSubmitting]     = useState(false)
+  const [error,           setError]          = useState<string | null>(null)
+  const [showLoginModal,  setShowLoginModal] = useState(false)
+  const [attachmentUrls,  setAttachmentUrls] = useState<string[]>([])
 
   const idFrontRef = useRef<HTMLInputElement>(null)
   const idBackRef  = useRef<HTMLInputElement>(null)
@@ -223,6 +225,7 @@ export default function NewContractPage() {
           start_date:             form.start_date,
           end_date:               form.end_date,
           notes:                  form.notes || undefined,
+          attachment_urls:        attachmentUrls.length > 0 ? attachmentUrls : undefined,
         }),
       })
       if (!res.ok) {
@@ -230,6 +233,7 @@ export default function NewContractPage() {
         throw new Error(json.error?.formErrors?.[0] ?? json.error ?? '등록 실패')
       }
       router.push('/contracts')
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.')
     } finally {
@@ -609,6 +613,17 @@ export default function NewContractPage() {
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
               placeholder="특이사항을 입력하세요."
+            />
+          </CardContent>
+        </Card>
+
+        {/* ── 계약서 첨부 ── */}
+        <Card>
+          <CardContent className="pt-5">
+            <AttachmentPanel
+              urls={attachmentUrls}
+              onChange={setAttachmentUrls}
+              onError={setError}
             />
           </CardContent>
         </Card>

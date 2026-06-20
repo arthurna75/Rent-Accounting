@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PrintButton } from '@/components/ui/PrintButton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatKRW } from '@/lib/utils/format'
 
@@ -85,7 +86,7 @@ export function IncomeStatementClient({ currentYear }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="print:hidden">
         <CardContent className="pt-6">
           <Tabs value={mode} onValueChange={v => setMode(v as 'year' | 'custom')}>
             <TabsList className="mb-4">
@@ -119,6 +120,7 @@ export function IncomeStatementClient({ currentYear }: Props) {
                 <Button onClick={handleFetch} disabled={loading}>
                   {loading ? '조회 중...' : '조회'}
                 </Button>
+                {data && <PrintButton />}
               </div>
             </TabsContent>
 
@@ -145,6 +147,7 @@ export function IncomeStatementClient({ currentYear }: Props) {
                 <Button onClick={handleFetch} disabled={loading}>
                   {loading ? '조회 중...' : '조회'}
                 </Button>
+                {data && <PrintButton />}
               </div>
             </TabsContent>
           </Tabs>

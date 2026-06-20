@@ -14,21 +14,50 @@ export async function GET(req: NextRequest) {
     new URL(req.url).searchParams.get('year') ?? String(new Date().getFullYear()),
   )
 
+  // Step 1: 해당 연도의 posted 전표 ID 조회 (embedded filter 대신 2단계 쿼리로 안정성 확보)
+  const { data: entries, error: entryErr } = await supabase
+    .from('journal_entries')
+    .select('id, entry_date')
+    .gte('entry_date', `${year}-01-01`)
+    .lte('entry_date', `${year}-12-31`)
+    .eq('status', 'posted')
+
+  if (entryErr) return NextResponse.json({ error: entryErr.message }, { status: 500 })
+
+  const entryMap: Record<string, string> = {}
+  const entryIds: string[] = (entries ?? []).map(e => {
+    entryMap[e.id] = e.entry_date
+    return e.id
+  })
+
+  if (entryIds.length === 0) {
+    return NextResponse.json({
+      data: {
+        year,
+        revenues: [],
+        expenses: [],
+        revenue_by_month: Array(12).fill(0),
+        expense_by_month: Array(12).fill(0),
+        net_income_by_month: Array(12).fill(0),
+        total_revenue: 0,
+        total_expense: 0,
+        total_net_income: 0,
+      },
+    })
+  }
+
+  // Step 2: 해당 전표 ID의 라인 + 계정과목 조회
   const { data: lines, error } = await supabase
     .from('journal_entry_lines')
     .select(`
       debit_amount,
       credit_amount,
+      journal_entry_id,
       account:chart_of_accounts!account_id (
         code, name, account_type, normal_balance
-      ),
-      journal_entry:journal_entries!journal_entry_id (
-        entry_date, status
       )
     `)
-    .gte('journal_entry.entry_date', `${year}-01-01`)
-    .lte('journal_entry.entry_date', `${year}-12-31`)
-    .eq('journal_entry.status', 'posted')
+    .in('journal_entry_id', entryIds)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -39,11 +68,12 @@ export async function GET(req: NextRequest) {
 
   for (const line of lines ?? []) {
     const acct = (line.account as unknown) as AcctMeta | null
-    const entry = (line.journal_entry as unknown) as { entry_date: string; status: string } | null
-    if (!acct || !entry) continue
+    if (!acct) continue
     if (!['수익', '비용'].includes(acct.account_type)) continue
 
-    const monthIdx = new Date(entry.entry_date).getMonth() // 0-based
+    const entryDate = entryMap[line.journal_entry_id]
+    if (!entryDate) continue
+    const monthIdx = new Date(entryDate).getMonth()
 
     if (!map[acct.code]) {
       map[acct.code] = { meta: acct, months: Array(12).fill(0) }
@@ -56,10 +86,10 @@ export async function GET(req: NextRequest) {
     map[acct.code].months[monthIdx] += net
   }
 
-  const entries = Object.values(map)
+  const allEntries = Object.values(map)
 
   function buildAccounts(type: '수익' | '비용') {
-    return entries
+    return allEntries
       .filter(e => e.meta.account_type === type)
       .sort((a, b) => a.meta.code.localeCompare(b.meta.code))
       .map(e => ({
@@ -80,9 +110,9 @@ export async function GET(req: NextRequest) {
   const expenseByMonth = sumByMonth(expenses)
   const netByMonth     = revenueByMonth.map((v, i) => v - expenseByMonth[i])
 
-  const totalRevenue    = revenueByMonth.reduce((s, v) => s + v, 0)
-  const totalExpense    = expenseByMonth.reduce((s, v) => s + v, 0)
-  const totalNetIncome  = totalRevenue - totalExpense
+  const totalRevenue   = revenueByMonth.reduce((s, v) => s + v, 0)
+  const totalExpense   = expenseByMonth.reduce((s, v) => s + v, 0)
+  const totalNetIncome = totalRevenue - totalExpense
 
   return NextResponse.json({
     data: {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { PrintButton } from '@/components/ui/PrintButton'
 import { PLStatsTable, type PLStatsData } from './PLStatsTable'
 
 interface Props {
@@ -53,6 +54,7 @@ export function PLStatsClient({ currentYear }: Props) {
         <Button onClick={() => fetchData(year)} disabled={loading} size="sm">
           {loading ? '조회 중...' : '조회'}
         </Button>
+        {data && !loading && <PrintButton />}
         {data && !loading && (
           <span className="text-xs text-gray-400">
             수익·비용 행 제목을 클릭하면 항목을 접거나 펼칠 수 있습니다.

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PrintButton } from '@/components/ui/PrintButton'
 import { formatKRW } from '@/lib/utils/format'
 
 interface AccountItem {
@@ -99,7 +100,7 @@ export function BalanceSheetClient({ defaultDate }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="print:hidden">
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1">
@@ -114,6 +115,7 @@ export function BalanceSheetClient({ defaultDate }: Props) {
             <Button onClick={handleFetch} disabled={loading}>
               {loading ? '조회 중...' : '조회'}
             </Button>
+            {data && <PrintButton />}
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </CardContent>
@@ -178,7 +180,7 @@ export function BalanceSheetClient({ defaultDate }: Props) {
             </Card>
           </div>
 
-          <p className="text-xs text-gray-400 text-center">
+          <p className="text-xs text-gray-400 text-center print:text-gray-600">
             기준일: {data.as_of_date}
             {data.summary.is_balanced && ' · 대차대조 일치 확인됨'}
           </p>

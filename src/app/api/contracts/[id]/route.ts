@@ -32,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const allowedFields = [
     'lessee_phone', 'lessee_email', 'end_date', 'monthly_rent',
     'monthly_management_fee', 'payment_due_day', 'notes', 'special_terms',
-    'auto_renewal',
+    'auto_renewal', 'attachment_urls',
   ]
   const update = Object.fromEntries(
     Object.entries(body).filter(([k]) => allowedFields.includes(k))

@@ -10,7 +10,7 @@ export type PropertyType = '아파트' | '다세대' | '단독주택' | '상가'
 export type ContractType = '월세' | '전세' | '반전세'
 export type ContractStatus = 'draft' | 'active' | 'expired' | 'terminated'
 export type JournalEntryType = '일반' | '임대수익' | '보증금수령' | '보증금반환' | '감가상각' | '간주임대료' | '세금' | '관리비' | '비용지출'
-export type EvidenceType = '현금영수증' | '세금계산서' | '영수증' | '기타'
+export type EvidenceType = '현금영수증' | '세금계산서' | '영수증' | '사업자용 카드' | '기타'
 export type JournalEntryStatus = 'draft' | 'posted' | 'reversed'
 export type UserRole = 'owner' | 'accountant' | 'viewer'
 export type SubscriptionPlan = 'basic' | 'pro' | 'enterprise'
@@ -226,6 +226,7 @@ export interface LeaseContract {
   termination_reason: string | null
   special_terms: string | null
   notes: string | null
+  attachment_urls?: string[] | null
   created_at: string
   updated_at: string
 }
@@ -319,6 +320,7 @@ export interface JournalEntry {
   created_by: string | null
   approved_by: string | null
   approved_at: string | null
+  attachment_urls?: string[] | null
   created_at: string
   updated_at: string
   // Joins

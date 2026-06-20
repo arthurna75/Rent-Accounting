@@ -18,7 +18,8 @@ const JournalEntrySchema = z.object({
   description: z.string().min(1),
   entry_type: z.enum(['일반','임대수익','보증금수령','보증금반환','감가상각','간주임대료','세금','관리비','비용지출']),
   vendor_id: z.string().uuid().optional().nullable(),
-  evidence_type: z.enum(['현금영수증','세금계산서','영수증','기타']).optional().nullable(),
+  evidence_type: z.enum(['현금영수증','세금계산서','영수증','사업자용 카드','기타']).optional().nullable(),
+  attachment_urls: z.array(z.string().url()).optional().nullable(),
   reference_id: z.string().uuid().optional(),
   reference_type: z.string().optional(),
   lines: z.array(LineSchema).min(2),
@@ -95,13 +96,14 @@ export async function POST(req: NextRequest) {
       user.id,
       parsed.data.auto_post,
     )
-    // vendor_id / evidence_type 는 postJournalEntry 외부 컬럼이므로 별도 UPDATE
-    if (parsed.data.vendor_id || parsed.data.evidence_type) {
+    // vendor_id / evidence_type / attachment_urls 는 postJournalEntry 외부 컬럼이므로 별도 UPDATE
+    if (parsed.data.vendor_id || parsed.data.evidence_type || parsed.data.attachment_urls) {
       await supabase
         .from('journal_entries')
         .update({
           vendor_id: parsed.data.vendor_id ?? null,
           evidence_type: parsed.data.evidence_type ?? null,
+          attachment_urls: parsed.data.attachment_urls ?? null,
         })
         .eq('id', entry.id)
     }

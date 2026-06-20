@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ArrowLeft } from 'lucide-react'
+import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 
 interface Property {
   id: string
@@ -34,6 +35,7 @@ interface LeaseContract {
   end_date: string
   notes: string | null
   special_terms: string | null
+  attachment_urls: string[] | null
 }
 
 export default function ContractEditForm({
@@ -47,6 +49,7 @@ export default function ContractEditForm({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>(contract.attachment_urls ?? [])
 
   const [form, setForm] = useState({
     lessee_phone: contract.lessee_phone ?? '',
@@ -75,6 +78,7 @@ export default function ContractEditForm({
         payment_due_day: parseInt(form.payment_due_day) || 1,
         notes: form.notes || null,
         special_terms: form.special_terms || null,
+        attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
       }
       if (contract.contract_type !== '전세') {
         body.monthly_rent = parseFloat(form.monthly_rent) || 0
@@ -249,6 +253,14 @@ export default function ContractEditForm({
                   value={form.notes}
                   onChange={e => set('notes', e.target.value)}
                   placeholder="특이사항을 입력하세요."
+                />
+              </div>
+
+              <div className="col-span-2">
+                <AttachmentPanel
+                  urls={attachmentUrls}
+                  onChange={setAttachmentUrls}
+                  onError={setError}
                 />
               </div>
             </div>

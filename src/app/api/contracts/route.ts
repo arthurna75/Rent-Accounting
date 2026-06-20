@@ -25,6 +25,7 @@ const ContractSchema = z.object({
   auto_journal_mgmt:        z.boolean().default(false),
   special_terms:            z.string().optional(),
   notes:                    z.string().optional(),
+  attachment_urls:          z.array(z.string().url()).optional().nullable(),
 })
 
 export async function GET(req: NextRequest) {

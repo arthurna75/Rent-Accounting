@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatKRW } from '@/lib/utils/format'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { SampleTrialBalance } from '@/components/sample/SampleReports'
+import { PrintButton } from '@/components/ui/PrintButton'
 
 interface PageProps {
   searchParams: Promise<{ year?: string }>
@@ -47,7 +48,9 @@ export default async function TrialBalancePage({ searchParams }: PageProps) {
           <h2 className="text-xl font-semibold text-gray-900">시산표</h2>
           <p className="text-sm text-gray-500 mt-1">회계연도별 계정과목의 차변·대변 합계와 잔액을 확인합니다.</p>
         </div>
-        <form method="GET">
+        <div className="flex items-center gap-2 flex-wrap">
+          <PrintButton className="print:hidden" />
+          <form method="GET">
           <div className="flex items-center gap-2">
             <label htmlFor="year-select" className="text-sm font-medium text-gray-700">
               회계연도
@@ -73,6 +76,7 @@ export default async function TrialBalancePage({ searchParams }: PageProps) {
             </button>
           </div>
         </form>
+        </div>
       </div>
 
       {!fiscalYear ? (
