@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,13 @@ interface Account {
   account_type: string
 }
 
+interface ContractOption {
+  id: string
+  property_id: string
+  lessee_name: string
+  property: { building_name: string; unit_number: string } | null
+}
+
 interface JournalLine {
   side: 'debit' | 'credit'
   account_code: string
@@ -27,11 +34,21 @@ interface JournalLine {
   amount: string
 }
 
+// 세금·관리비·감가상각·간주임대료 제거, 사용자 지정 순서
 const ENTRY_TYPES: JournalEntryType[] = [
-  '일반', '임대수익', '보증금수령', '보증금반환', '감가상각', '간주임대료', '세금', '관리비', '비용지출',
+  '비용지출', '임대수익', '보증금수령', '보증금반환', '일반',
 ]
 
-const EVIDENCE_TYPES: EvidenceType[] = ['현금영수증', '세금계산서', '영수증', '기타']
+const EVIDENCE_TYPES: EvidenceType[] = ['현금영수증', '세금계산서', '영수증', '사업자용 카드', '기타']
+
+// 분개유형 → 차변/대변 허용 계정유형
+const ENTRY_FILTER: Record<string, { debit: string[]; credit: string[] }> = {
+  '비용지출':  { debit: ['비용'],  credit: ['자산'] },
+  '임대수익':  { debit: ['자산'],  credit: ['수익'] },
+  '보증금수령': { debit: ['자산'],  credit: ['부채'] },
+  '보증금반환': { debit: ['부채'],  credit: ['자산'] },
+  '일반':      { debit: [],       credit: [] },
+}
 
 function digits(v: string) { return v.replace(/\D/g, '') }
 function commaFmt(v: string) {
@@ -45,23 +62,55 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
   const { id } = use(params)
   const router = useRouter()
 
-  const [loading, setLoading] = useState(true)
-  const [entryDate, setEntryDate] = useState('')
-  const [entryType, setEntryType] = useState<JournalEntryType>('일반')
+  const [loading, setLoading]       = useState(true)
+  const [entryDate, setEntryDate]   = useState('')
+  const [entryType, setEntryType]   = useState<JournalEntryType>('비용지출')
   const [description, setDescription] = useState('')
-  const [vendorId, setVendorId] = useState<string>('')
+  const [vendorId, setVendorId]     = useState<string>('')
   const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>('')
-  const [lines, setLines] = useState<JournalLine[]>([])
+  const [contractId, setContractId] = useState<string>('')
+  const [lines, setLines]           = useState<JournalLine[]>([])
 
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [acctMap, setAcctMap] = useState<Record<string, string>>({})
-  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [accounts, setAccounts]   = useState<Account[]>([])
+  const [acctMap, setAcctMap]     = useState<Record<string, string>>({})
+  const [vendors, setVendors]     = useState<Vendor[]>([])
+  const [contracts, setContracts] = useState<ContractOption[]>([])
 
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting]       = useState(false)
+  const [error, setError]                 = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
 
+  // 분개유형별 허용 계정 필터
+  const allowedAccounts = useMemo(() => {
+    const filter = ENTRY_FILTER[entryType] ?? { debit: [], credit: [] }
+    return {
+      debit:  filter.debit.length  > 0 ? accounts.filter(a => filter.debit.includes(a.account_type))  : accounts,
+      credit: filter.credit.length > 0 ? accounts.filter(a => filter.credit.includes(a.account_type)) : accounts,
+    }
+  }, [accounts, entryType])
+
+  const selectedContract = useMemo(
+    () => contracts.find(c => c.id === contractId) ?? null,
+    [contracts, contractId],
+  )
+
+  function contractLabel(c: ContractOption) {
+    const prop = c.property
+    const propName = prop
+      ? `${prop.building_name}${prop.unit_number ? ' ' + prop.unit_number : ''}`
+      : '(부동산 미연결)'
+    return `${propName} · ${c.lessee_name}`
+  }
+
   useEffect(() => {
+    // 활성 계약 로딩
+    void createClient()
+      .from('lease_contracts')
+      .select('id, property_id, lessee_name, property:properties!property_id(building_name, unit_number)')
+      .eq('status', 'active')
+      .order('property_id')
+      .then(({ data }) => setContracts((data ?? []) as ContractOption[]))
+
     Promise.all([
       fetch(`/api/accounting/journal-entries/${id}`).then(r => r.json()),
       fetch('/api/accounting/chart-of-accounts').then(r => r.json()),
@@ -108,12 +157,13 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
   }, [id])
 
   function setLineSide(idx: number, side: 'debit' | 'credit') {
-    setLines(prev => prev.map((l, i) => i === idx ? { ...l, side } : l))
+    setLines(prev => prev.map((l, i) => i === idx ? { ...l, side, account_code: '', account_name: '' } : l))
   }
 
-  function setLineCode(idx: number, code: string) {
+  function setLineCode(idx: number, code: string, pool: Account[]) {
+    const name = pool.find(a => a.code === code)?.name ?? acctMap[code] ?? ''
     setLines(prev => prev.map((l, i) =>
-      i === idx ? { ...l, account_code: code, account_name: acctMap[code] ?? l.account_name } : l,
+      i === idx ? { ...l, account_code: code, account_name: name } : l,
     ))
   }
 
@@ -170,9 +220,11 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
           vendor_id: vendorId || null,
           evidence_type: evidenceType || null,
           lines: filled.map(l => ({
-            account_code: l.account_code.trim(),
+            account_code:  l.account_code.trim(),
             debit_amount:  l.side === 'debit'  ? parseAmt(l.amount) : 0,
             credit_amount: l.side === 'credit' ? parseAmt(l.amount) : 0,
+            contract_id:   contractId || undefined,
+            property_id:   selectedContract?.property_id || undefined,
           })),
         }),
       })
@@ -261,6 +313,21 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
                   placeholder="거래 내용을 입력하세요."
                 />
               </div>
+              {/* 적용호수 */}
+              <div className="col-span-2 space-y-1.5">
+                <Label>적용 호수 (계약)</Label>
+                <Select value={contractId} onValueChange={setContractId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="계약 선택 (선택사항)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">없음</SelectItem>
+                    {contracts.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{contractLabel(c)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5">
                 <Label>지급처</Label>
                 <Select value={vendorId} onValueChange={setVendorId}>
@@ -307,7 +374,9 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
               <span />
             </div>
 
-            {lines.map((line, i) => (
+            {lines.map((line, i) => {
+              const pool = line.side === 'debit' ? allowedAccounts.debit : allowedAccounts.credit
+              return (
               <div key={i} className="grid grid-cols-[88px_1fr_140px_32px] gap-2 items-center">
                 <div className="flex h-9 rounded-md border overflow-hidden text-xs font-semibold">
                   <button type="button" onClick={() => setLineSide(i, 'debit')}
@@ -320,19 +389,19 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
                   </button>
                 </div>
 
-                {accounts.length > 0 ? (
+                {pool.length > 0 ? (
                   <select
                     value={line.account_code}
-                    onChange={e => setLineCode(i, e.target.value)}
+                    onChange={e => setLineCode(i, e.target.value, pool)}
                     className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">계정 선택...</option>
-                    {accounts.map(a => (
+                    {pool.map(a => (
                       <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
                     ))}
                   </select>
                 ) : (
-                  <Input value={line.account_code} onChange={e => setLineCode(i, e.target.value)} placeholder="코드" />
+                  <Input value={line.account_code} onChange={e => setLineCode(i, e.target.value, accounts)} placeholder="코드" />
                 )}
 
                 <Input
@@ -353,7 +422,8 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            ))}
+              )
+            })}
 
             <div className={cn(
               'mt-3 rounded-lg px-4 py-3 border',
