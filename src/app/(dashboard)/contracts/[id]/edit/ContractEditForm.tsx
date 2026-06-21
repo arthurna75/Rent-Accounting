@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -10,9 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Lock } from 'lucide-react'
 import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 
+// ────────────────────────────────────────
+// 타입
+// ────────────────────────────────────────
 interface Property {
   id: string
   building_name: string
@@ -28,8 +31,10 @@ interface LeaseContract {
   lessee_email: string | null
   contract_type: string
   contract_number: string
+  contract_date: string | null
   deposit_amount: number
   monthly_rent: number
+  monthly_management_fee: number | null
   vat_included: boolean
   payment_due_day: number
   start_date: string
@@ -39,6 +44,35 @@ interface LeaseContract {
   attachment_urls: string[] | null
 }
 
+// ────────────────────────────────────────
+// 숫자 포맷 유틸
+// ────────────────────────────────────────
+function digits(v: string) { return v.replace(/[^0-9]/g, '') }
+function commaFmt(v: string) {
+  const n = parseInt(digits(v), 10)
+  return isNaN(n) ? '' : n.toLocaleString('ko-KR')
+}
+
+// ────────────────────────────────────────
+// 잠금 필드 표시용 컴포넌트
+// ────────────────────────────────────────
+function LockedField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="flex items-center gap-1 text-gray-500">
+        <Lock className="w-3 h-3" />
+        {label}
+      </Label>
+      <div className="h-9 px-3 flex items-center rounded-md border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-600">
+        {value || '—'}
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────
+// 메인 폼
+// ────────────────────────────────────────
 export default function ContractEditForm({
   contract,
   properties,
@@ -53,36 +87,72 @@ export default function ContractEditForm({
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>(contract.attachment_urls ?? [])
 
   const [form, setForm] = useState({
-    lessee_phone: contract.lessee_phone ?? '',
-    lessee_email: contract.lessee_email ?? '',
-    end_date: contract.end_date,
-    monthly_rent: contract.monthly_rent.toString(),
-    payment_due_day: contract.payment_due_day.toString(),
-    notes: contract.notes ?? '',
-    special_terms: contract.special_terms ?? '',
+    property_id:            contract.property_id,
+    lessee_name:            contract.lessee_name,
+    lessee_phone:           contract.lessee_phone ?? '',
+    lessee_email:           contract.lessee_email ?? '',
+    contract_type:          contract.contract_type,
+    contract_date:          contract.contract_date ?? '',
+    start_date:             contract.start_date,
+    end_date:               contract.end_date,
+    deposit_amount:         contract.deposit_amount.toString(),
+    monthly_rent:           contract.monthly_rent.toString(),
+    monthly_management_fee: contract.monthly_management_fee?.toString() ?? '',
+    payment_due_day:        contract.payment_due_day.toString(),
+    vat_included:           contract.vat_included,
+    notes:                  contract.notes ?? '',
+    special_terms:          contract.special_terms ?? '',
   })
 
-  const set = (key: string, value: string) =>
+  const setStr = (key: string, value: string) =>
     setForm(prev => ({ ...prev, [key]: value }))
+  const setBool = (key: string, value: boolean) =>
+    setForm(prev => ({ ...prev, [key]: value }))
+
+  // 건물명 고정 (현재 부동산 기준)
+  const originalProp = properties.find(p => p.id === contract.property_id)
+  const buildingName = originalProp?.building_name ?? ''
+
+  // 같은 건물의 호실 목록 (자연 정렬)
+  const sameBuilding = useMemo(() =>
+    properties
+      .filter(p => p.building_name === buildingName)
+      .sort((a, b) => a.unit_number.localeCompare(b.unit_number, 'ko', { numeric: true })),
+    [properties, buildingName],
+  )
+
+  const isJeonse = form.contract_type === '전세'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     const { data: { user } } = await createClient().auth.getUser()
     if (!user) { setShowLoginModal(true); return }
+
+    if (!form.lessee_name.trim()) { setError('임차인명을 입력해 주세요.'); return }
+    if (!form.end_date)           { setError('계약 종료일을 입력해 주세요.'); return }
+
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
-        lessee_phone: form.lessee_phone || null,
-        lessee_email: form.lessee_email || null,
-        end_date: form.end_date,
-        payment_due_day: parseInt(form.payment_due_day) || 1,
-        notes: form.notes || null,
-        special_terms: form.special_terms || null,
-        attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
-      }
-      if (contract.contract_type !== '전세') {
-        body.monthly_rent = parseFloat(form.monthly_rent) || 0
+        property_id:            form.property_id,
+        lessee_name:            form.lessee_name,
+        lessee_phone:           form.lessee_phone || null,
+        lessee_email:           form.lessee_email || null,
+        contract_type:          form.contract_type,
+        contract_date:          form.contract_date || null,
+        start_date:             form.start_date,
+        end_date:               form.end_date,
+        deposit_amount:         parseInt(digits(form.deposit_amount), 10) || 0,
+        monthly_rent:           isJeonse ? 0 : (parseInt(digits(form.monthly_rent), 10) || 0),
+        monthly_management_fee: isJeonse || !form.monthly_management_fee
+                                  ? null
+                                  : (parseInt(digits(form.monthly_management_fee), 10) || 0),
+        payment_due_day:        parseInt(form.payment_due_day) || 1,
+        vat_included:           form.vat_included,
+        notes:                  form.notes || null,
+        special_terms:          form.special_terms || null,
+        attachment_urls:        attachmentUrls.length > 0 ? attachmentUrls : null,
       }
 
       const res = await fetch(`/api/contracts/${contract.id}`, {
@@ -103,9 +173,6 @@ export default function ContractEditForm({
     }
   }
 
-  const currentProp = properties.find(p => p.id === contract.property_id)
-  const isJeonse = contract.contract_type === '전세'
-
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <LoginModal
@@ -113,6 +180,7 @@ export default function ContractEditForm({
         onOpenChange={setShowLoginModal}
         description="계약 정보를 수정하려면 로그인이 필요합니다."
       />
+
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/contracts/${contract.id}`}>
@@ -123,108 +191,199 @@ export default function ContractEditForm({
         <h2 className="text-xl font-semibold text-gray-900">계약 수정</h2>
       </div>
 
+      <p className="text-xs text-gray-400 flex items-center gap-1">
+        <Lock className="w-3 h-3" /> 아이콘 항목은 변경 불가 (건물명·계약번호)
+      </p>
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 읽기 전용 기본 정보 */}
+
+        {/* ── 부동산 ── */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">기본 정보 (변경 불가)</CardTitle>
+            <CardTitle className="text-base">부동산</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs text-gray-500">부동산</Label>
-                <p className="text-sm font-medium text-gray-800">
-                  {currentProp
-                    ? `${currentProp.building_name}${currentProp.unit_number ? ' ' + currentProp.unit_number : ''}`
-                    : '—'}
-                  {currentProp?.address_road ? ` · ${currentProp.address_road}` : ''}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">임차인</Label>
-                <p className="text-sm font-medium text-gray-800">{contract.lessee_name}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">계약 유형</Label>
-                <p className="text-sm font-medium text-gray-800">{contract.contract_type}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">계약 번호</Label>
-                <p className="text-sm font-medium text-gray-800">{contract.contract_number}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">계약 시작일</Label>
-                <p className="text-sm font-medium text-gray-800">{contract.start_date}</p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">보증금</Label>
-                <p className="text-sm font-medium text-gray-800">
-                  {contract.deposit_amount.toLocaleString('ko-KR')}원
-                </p>
+              {/* 건물명: 잠금 */}
+              <LockedField label="건물명" value={buildingName} />
+
+              {/* 호실: 같은 건물 내에서 변경 가능 */}
+              <div className="space-y-1.5">
+                <Label>호실</Label>
+                <Select value={form.property_id} onValueChange={v => setStr('property_id', v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="호실 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sameBuilding.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.unit_number || '(단일 호실)'}
+                        {p.address_road ? ` · ${p.address_road}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* 수정 가능 필드 */}
+        {/* ── 계약 기본 정보 ── */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">수정 가능 항목</CardTitle>
+            <CardTitle className="text-base">계약 기본 정보</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
+              {/* 계약유형 */}
+              <div className="space-y-1.5">
+                <Label>계약유형</Label>
+                <Select value={form.contract_type} onValueChange={v => setStr('contract_type', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="월세">월세</SelectItem>
+                    <SelectItem value="전세">전세</SelectItem>
+                    <SelectItem value="반전세">반전세</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 계약번호: 잠금 */}
+              <LockedField label="계약번호" value={contract.contract_number} />
+
+              {/* 계약일자 */}
+              <div className="space-y-1.5">
+                <Label htmlFor="contract_date">계약일자</Label>
+                <Input
+                  id="contract_date"
+                  type="date"
+                  value={form.contract_date}
+                  onChange={e => setStr('contract_date', e.target.value)}
+                />
+              </div>
+
+              {/* 계약 시작일 */}
+              <div className="space-y-1.5">
+                <Label htmlFor="start_date">계약 시작일</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={form.start_date}
+                  onChange={e => setStr('start_date', e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* 계약 종료일 */}
+              <div className="space-y-1.5">
+                <Label htmlFor="end_date">계약 종료일 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="end_date"
+                  type="date"
+                  value={form.end_date}
+                  onChange={e => setStr('end_date', e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── 임차인 정보 ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">임차인 정보</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-1.5">
+                <Label htmlFor="lessee_name">임차인명 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="lessee_name"
+                  value={form.lessee_name}
+                  onChange={e => setStr('lessee_name', e.target.value)}
+                  placeholder="홍길동"
+                  required
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="lessee_phone">연락처</Label>
                 <Input
                   id="lessee_phone"
                   value={form.lessee_phone}
-                  onChange={e => set('lessee_phone', e.target.value)}
+                  onChange={e => setStr('lessee_phone', e.target.value)}
                   placeholder="010-0000-0000"
                 />
               </div>
-
               <div className="space-y-1.5">
                 <Label htmlFor="lessee_email">이메일</Label>
                 <Input
                   id="lessee_email"
                   type="email"
                   value={form.lessee_email}
-                  onChange={e => set('lessee_email', e.target.value)}
+                  onChange={e => setStr('lessee_email', e.target.value)}
                   placeholder="example@email.com"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* ── 금액 정보 ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">금액 정보</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              {/* 보증금 */}
               <div className="space-y-1.5">
-                <Label htmlFor="end_date">계약 종료일</Label>
+                <Label htmlFor="deposit_amount">보증금 (원)</Label>
                 <Input
-                  id="end_date"
-                  type="date"
-                  value={form.end_date}
-                  onChange={e => set('end_date', e.target.value)}
-                  required
+                  id="deposit_amount"
+                  type="text"
+                  inputMode="numeric"
+                  value={commaFmt(form.deposit_amount)}
+                  onChange={e => setStr('deposit_amount', digits(e.target.value))}
+                  placeholder="0"
                 />
               </div>
 
+              {/* 월세 */}
               {!isJeonse && (
                 <div className="space-y-1.5">
                   <Label htmlFor="monthly_rent">월세 (원)</Label>
                   <Input
                     id="monthly_rent"
-                    type="number"
-                    min="0"
-                    value={form.monthly_rent}
-                    onChange={e => set('monthly_rent', e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.monthly_rent)}
+                    onChange={e => setStr('monthly_rent', digits(e.target.value))}
+                    placeholder="0"
                   />
                 </div>
               )}
 
+              {/* 관리비 */}
+              {!isJeonse && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="monthly_management_fee">관리비 (원)</Label>
+                  <Input
+                    id="monthly_management_fee"
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.monthly_management_fee)}
+                    onChange={e => setStr('monthly_management_fee', digits(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+
+              {/* 납부일 */}
               {!isJeonse && (
                 <div className="space-y-1.5">
                   <Label>납부일</Label>
-                  <Select
-                    value={form.payment_due_day}
-                    onValueChange={v => set('payment_due_day', v)}
-                  >
+                  <Select value={form.payment_due_day} onValueChange={v => setStr('payment_due_day', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
@@ -235,38 +394,60 @@ export default function ContractEditForm({
                 </div>
               )}
 
-              <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="special_terms">특약사항</Label>
-                <textarea
-                  id="special_terms"
-                  rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-                  value={form.special_terms}
-                  onChange={e => set('special_terms', e.target.value)}
-                  placeholder="특약 사항을 입력하세요."
+              {/* 부가세 포함 */}
+              <div className="col-span-2 flex items-center gap-2 pt-1">
+                <input
+                  id="vat_included"
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  checked={form.vat_included}
+                  onChange={e => setBool('vat_included', e.target.checked)}
                 />
-              </div>
-
-              <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="notes">메모</Label>
-                <textarea
-                  id="notes"
-                  rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-                  value={form.notes}
-                  onChange={e => set('notes', e.target.value)}
-                  placeholder="특이사항을 입력하세요."
-                />
-              </div>
-
-              <div className="col-span-2">
-                <AttachmentPanel
-                  urls={attachmentUrls}
-                  onChange={setAttachmentUrls}
-                  onError={setError}
-                />
+                <Label htmlFor="vat_included" className="cursor-pointer">부가세 포함</Label>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ── 특약·메모 ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">특약 · 메모</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="special_terms">특약사항</Label>
+              <textarea
+                id="special_terms"
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                value={form.special_terms}
+                onChange={e => setStr('special_terms', e.target.value)}
+                placeholder="특약 사항을 입력하세요."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">메모</Label>
+              <textarea
+                id="notes"
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                value={form.notes}
+                onChange={e => setStr('notes', e.target.value)}
+                placeholder="특이사항을 입력하세요."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── 첨부파일 ── */}
+        <Card>
+          <CardContent className="pt-5">
+            <AttachmentPanel
+              urls={attachmentUrls}
+              onChange={setAttachmentUrls}
+              onError={setError}
+            />
           </CardContent>
         </Card>
 
