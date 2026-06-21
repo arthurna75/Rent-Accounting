@@ -176,7 +176,9 @@ export interface UserProfile {
 export interface Property {
   id: string
   organization_id: string
-  name: string
+  name: string          // computed: building_name + (unit_number ? ' ' + unit_number : '')
+  building_name: string // 건물명
+  unit_number: string   // 호실
   property_type: PropertyType
   rental_tax_type: '과세' | '면세'
   address_road: string

@@ -25,7 +25,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const body = await req.json()
   const allowedFields = [
-    'name', 'address_road', 'address_detail', 'property_type', 'rental_tax_type',
+    'building_name', 'unit_number',
+    'address_road', 'address_detail', 'property_type', 'rental_tax_type',
     'useful_life', 'building_area', 'building_value', 'notes', 'is_active',
     'acquisition_cost', 'acquisition_date', 'depreciation_method', 'salvage_value',
   ]

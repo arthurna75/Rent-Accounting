@@ -48,6 +48,8 @@ const mockProperty = (overrides = {}): Property => ({
   id: 'prop-1',
   organization_id: 'org-1',
   name: '테스트 빌딩',
+  building_name: '테스트 빌딩',
+  unit_number: '',
   property_type: '상가',
   rental_tax_type: '과세',
   address_road: '서울시 강남구 테헤란로 1',

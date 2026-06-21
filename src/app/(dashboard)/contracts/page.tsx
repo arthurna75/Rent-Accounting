@@ -7,11 +7,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { BuildingFilter } from '@/components/ui/BuildingFilter'
 import Link from 'next/link'
 import { PlusCircle } from 'lucide-react'
 
 interface PageProps {
-  searchParams: Promise<{ status?: string }>
+  searchParams: Promise<{ status?: string; building?: string }>
 }
 
 type ContractStatus = 'active' | 'expired' | 'terminated'
@@ -26,7 +27,7 @@ interface LeaseContract {
   start_date: string
   end_date: string
   status: ContractStatus
-  property: { name: string } | null
+  property: { building_name: string; unit_number: string } | null
 }
 
 const STATUS_TABS = [
@@ -70,9 +71,15 @@ function DDay({ dateStr }: { dateStr: string }) {
   return <span className={cls}>{label}</span>
 }
 
+function propLabel(p: { building_name: string; unit_number: string } | null) {
+  if (!p) return '—'
+  return p.unit_number ? `${p.building_name} ${p.unit_number}` : p.building_name
+}
+
 export default async function ContractsPage({ searchParams }: PageProps) {
   const params = await searchParams
   const activeStatus = params.status as ContractStatus | undefined
+  const selectedBuilding = params.building ?? ''
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -91,11 +98,29 @@ export default async function ContractsPage({ searchParams }: PageProps) {
     .eq('organization_id', profile!.organization_id)
   if ((propCount ?? 0) === 0) return <SampleContracts isGuest={false} />
 
-  const baseQuery = () =>
-    supabase
+  // 건물 목록 조회 (필터용)
+  const { data: propertiesData } = await supabase
+    .from('properties')
+    .select('id, building_name')
+    .eq('organization_id', profile!.organization_id)
+    .eq('is_active', true)
+    .order('building_name', { ascending: true })
+
+  const buildings = [...new Set((propertiesData ?? []).map(p => p.building_name))].sort()
+
+  // 선택된 건물의 property_id 목록
+  const buildingPropIds = selectedBuilding
+    ? (propertiesData ?? []).filter(p => p.building_name === selectedBuilding).map(p => p.id)
+    : null
+
+  const baseQuery = () => {
+    let q = supabase
       .from('lease_contracts')
       .select('id, status', { count: 'exact', head: true })
       .eq('organization_id', profile!.organization_id)
+    if (buildingPropIds) q = q.in('property_id', buildingPropIds)
+    return q
+  }
 
   const [allCount, activeCount, expiredCount, terminatedCount] = await Promise.all([
     baseQuery(),
@@ -113,16 +138,18 @@ export default async function ContractsPage({ searchParams }: PageProps) {
 
   let query = supabase
     .from('lease_contracts')
-    .select('*, property:properties!property_id(name)')
+    .select('*, property:properties!property_id(building_name, unit_number)')
     .eq('organization_id', profile!.organization_id)
     .order('end_date', { ascending: true })
 
   if (activeStatus) query = query.eq('status', activeStatus)
+  if (buildingPropIds) query = query.in('property_id', buildingPropIds)
 
   const { data: contracts } = await query
   const list = (contracts ?? []) as unknown as LeaseContract[]
 
   const tabCountKey = (key: string | undefined) => key ?? 'all'
+  const buildingQs = selectedBuilding ? `&building=${encodeURIComponent(selectedBuilding)}` : ''
 
   return (
     <div className="space-y-5">
@@ -136,15 +163,26 @@ export default async function ContractsPage({ searchParams }: PageProps) {
         </Link>
       </div>
 
+      {/* 건물 필터 */}
+      {buildings.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">건물</span>
+          <BuildingFilter buildings={buildings} current={selectedBuilding} />
+        </div>
+      )}
+
       {/* 상태 탭 */}
       <div className="flex gap-1 border-b border-gray-200">
         {STATUS_TABS.map(tab => {
           const isActive = activeStatus === tab.key
           const count = counts[tabCountKey(tab.key)]
+          const href = tab.key
+            ? `/contracts?status=${tab.key}${buildingQs}`
+            : `/contracts${buildingQs ? `?${buildingQs.slice(1)}` : ''}`
           return (
             <Link
               key={tabCountKey(tab.key)}
-              href={tab.key ? `/contracts?status=${tab.key}` : '/contracts'}
+              href={href}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 isActive
                   ? 'border-blue-600 text-blue-700'
@@ -190,7 +228,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
                     <TableCell>
                       <Link href={`/contracts/${c.id}`} className="block">
                         <span className="font-medium text-gray-800">
-                          {c.property?.name ?? '—'}
+                          {propLabel(c.property)}
                         </span>
                       </Link>
                     </TableCell>

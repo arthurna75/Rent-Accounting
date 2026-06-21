@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 
 const PropertySchema = z.object({
-  name: z.string().min(1).max(100),
+  building_name: z.string().min(1).max(100),
+  unit_number: z.string().max(50).default(''),
   address_road: z.string().min(1),
   address_detail: z.string().optional(),
   property_type: z.enum(['아파트', '다세대', '단독주택', '상가', '오피스텔', '근린생활시설', '기타']),
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('properties')
     .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
+    .order('building_name', { ascending: true })
+    .order('unit_number', { ascending: true })
     .range(offset, offset + limit - 1)
 
   if (isActiveParam !== null) {

@@ -20,9 +20,10 @@ export default async function ContractEditPage({
       .single(),
     supabase
       .from('properties')
-      .select('id, name, address_road')
+      .select('id, building_name, unit_number, address_road')
       .eq('is_active', true)
-      .order('name'),
+      .order('building_name')
+      .order('unit_number'),
   ])
 
   if (contractResult.error || !contractResult.data) notFound()

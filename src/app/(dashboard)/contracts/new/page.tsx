@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
@@ -21,7 +21,8 @@ import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 // ────────────────────────────────────────
 interface Property {
   id: string
-  name: string
+  building_name: string
+  unit_number: string
   address_road: string
 }
 
@@ -40,7 +41,7 @@ interface ExistingContract {
   vat_included: boolean
   payment_due_day: number
   notes: string | null
-  property?: { name: string; address_road: string }
+  property?: { building_name: string; unit_number: string; address_road: string }
 }
 
 type ContractType = '월세' | '전세' | '반전세'
@@ -95,12 +96,18 @@ function commaFmt(v: string) {
   return isNaN(n) ? '' : n.toLocaleString('ko-KR')
 }
 
+function propLabel(p: { building_name: string; unit_number: string } | null | undefined) {
+  if (!p) return ''
+  return p.unit_number ? `${p.building_name} ${p.unit_number}` : p.building_name
+}
+
 export default function NewContractPage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const propertyIdParam = searchParams.get('propertyId') ?? ''
 
   const [properties,     setProperties]     = useState<Property[]>([])
+  const [selectedBuilding, setSelectedBuilding] = useState('')
   const [form,           setForm]           = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
   const [submitting,      setSubmitting]     = useState(false)
   const [error,           setError]          = useState<string | null>(null)
@@ -120,7 +127,15 @@ export default function NewContractPage() {
   useEffect(() => {
     fetch('/api/properties?limit=200')
       .then(r => r.json())
-      .then(json => setProperties(json.data ?? []))
+      .then(json => {
+        const props: Property[] = json.data ?? []
+        setProperties(props)
+        // URL 파라미터로 전달된 부동산 미리 선택
+        if (propertyIdParam) {
+          const found = props.find(p => p.id === propertyIdParam)
+          if (found) setSelectedBuilding(found.building_name)
+        }
+      })
       .catch(() => {})
 
     fetch('/api/contracts/next-number')
@@ -132,6 +147,23 @@ export default function NewContractPage() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  // 건물 목록 (중복 제거, 정렬)
+  const buildings = useMemo(() =>
+    [...new Set(properties.map(p => p.building_name))].sort(),
+    [properties]
+  )
+
+  // 선택된 건물의 호실 목록
+  const unitsForBuilding = useMemo(() =>
+    selectedBuilding ? properties.filter(p => p.building_name === selectedBuilding) : [],
+    [properties, selectedBuilding]
+  )
+
+  function handleBuildingChange(building: string) {
+    setSelectedBuilding(building)
+    set('property_id', '')
   }
 
   // ── 기존 계약 목록 로드 & 다이얼로그 오픈 ──
@@ -152,12 +184,15 @@ export default function NewContractPage() {
 
   function applyCopy(c: ExistingContract) {
     const [idFront = '', idBack = ''] = (c.lessee_id_number ?? '').split('-')
+    // 부동산 건물명 복원
+    const prop = properties.find(p => p.id === c.property_id)
+    if (prop) setSelectedBuilding(prop.building_name)
     setForm(prev => ({
       ...INITIAL,
-      contract_number:        prev.contract_number,   // 자동채번 유지
+      contract_number:        prev.contract_number,
       property_id:            c.property_id,
       contract_type:          c.contract_type,
-      contract_date:          '',                      // 새 계약일 입력
+      contract_date:          '',
       lessee_name:            c.lessee_name,
       lessee_phone:           c.lessee_phone ?? '',
       lessee_id_front:        idFront,
@@ -180,7 +215,8 @@ export default function NewContractPage() {
   const filteredContracts = copyList.filter(c =>
     c.lessee_name.includes(copySearch) ||
     c.contract_number.includes(copySearch) ||
-    (c.property?.name ?? '').includes(copySearch),
+    (c.property?.building_name ?? '').includes(copySearch) ||
+    (c.property?.unit_number ?? '').includes(copySearch),
   )
 
   async function handleSubmit(e: React.FormEvent) {
@@ -190,14 +226,14 @@ export default function NewContractPage() {
     const { data: { user } } = await createClient().auth.getUser()
     if (!user) { setShowLoginModal(true); return }
 
-    if (!form.property_id)           { setError('부동산을 선택해 주세요.');          return }
-    if (!form.lessee_name.trim())    { setError('임차인명을 입력해 주세요.');         return }
-    if (!form.lessee_phone.trim())   { setError('연락처를 입력해 주세요.');           return }
-    if (!form.contract_date)         { setError('계약일자를 입력해 주세요.');         return }
+    if (!form.property_id)           { setError('부동산(호실)을 선택해 주세요.');       return }
+    if (!form.lessee_name.trim())    { setError('임차인명을 입력해 주세요.');            return }
+    if (!form.lessee_phone.trim())   { setError('연락처를 입력해 주세요.');              return }
+    if (!form.contract_date)         { setError('계약일자를 입력해 주세요.');            return }
     if (form.lessee_id_front.length !== 6) { setError('주민번호 앞 6자리를 입력해 주세요.'); return }
     if (form.lessee_id_back.length  !== 1) { setError('주민번호 뒷 1자리를 입력해 주세요.'); return }
     if (!form.start_date || !form.end_date) { setError('계약 기간을 입력해 주세요.'); return }
-    if (!form.contract_number.trim()) { setError('계약 번호를 입력해 주세요.');       return }
+    if (!form.contract_number.trim()) { setError('계약 번호를 입력해 주세요.');          return }
 
     setSubmitting(true)
     try {
@@ -264,7 +300,7 @@ export default function NewContractPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <Input
-              placeholder="임차인명, 계약번호, 부동산명 검색..."
+              placeholder="임차인명, 계약번호, 건물명, 호실 검색..."
               value={copySearch}
               onChange={e => setCopySearch(e.target.value)}
               className="pl-9"
@@ -290,7 +326,7 @@ export default function NewContractPage() {
                   </div>
                   {c.property && (
                     <p className="text-xs text-gray-500 mt-0.5 truncate">
-                      {c.property.name} · {c.property.address_road}
+                      {propLabel(c.property)}{c.property.address_road ? ` · ${c.property.address_road}` : ''}
                     </p>
                   )}
                   <p className="text-xs text-gray-400 mt-0.5">
@@ -335,20 +371,42 @@ export default function NewContractPage() {
             <CardTitle className="text-base">계약 기본 정보</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="col-span-2 space-y-1.5">
-              <Label>부동산 <span className="text-red-500">*</span></Label>
-              <Select value={form.property_id} onValueChange={v => set('property_id', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="부동산 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {properties.map(p => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}{p.address_road ? ` · ${p.address_road}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {/* 2단계 부동산 선택: 건물명 → 호실 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>건물명 <span className="text-red-500">*</span></Label>
+                <Select value={selectedBuilding} onValueChange={handleBuildingChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="건물 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {buildings.map(b => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>호실 <span className="text-red-500">*</span></Label>
+                <Select
+                  value={form.property_id}
+                  onValueChange={v => set('property_id', v)}
+                  disabled={!selectedBuilding}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedBuilding ? '호실 선택' : '건물 먼저 선택'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unitsForBuilding.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.unit_number || '(단일 호실)'}{p.address_road ? ` · ${p.address_road}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -551,9 +609,7 @@ export default function NewContractPage() {
                     />
                     <span className="text-sm text-gray-700">
                       월세 자동반영
-                      <span className="text-xs text-gray-400 ml-1">
-                        (차변: 보통예금 / 대변: 임대수익)
-                      </span>
+                      <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 임대수익)</span>
                     </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -566,9 +622,7 @@ export default function NewContractPage() {
                     />
                     <span className="text-sm text-gray-700">
                       관리비 자동반영
-                      <span className="text-xs text-gray-400 ml-1">
-                        (차변: 보통예금 / 대변: 관리비수익)
-                      </span>
+                      <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 관리비수익)</span>
                     </span>
                   </label>
                 </div>

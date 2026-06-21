@@ -39,7 +39,8 @@ interface RentTransaction {
 }
 
 interface Property {
-  name: string
+  building_name: string
+  unit_number: string
   address_road: string | null
   property_type: string | null
 }
@@ -104,7 +105,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
   const [contractResult, depositsResult, rentsResult] = await Promise.all([
     supabase
       .from('lease_contracts')
-      .select('*, property:properties!property_id(name, address_road, property_type)')
+      .select('*, property:properties!property_id(building_name, unit_number, address_road, property_type)')
       .eq('id', id)
       .single(),
     supabase
@@ -169,7 +170,11 @@ export default async function ContractDetailPage({ params }: PageProps) {
             <CardTitle className="text-base">계약 정보</CardTitle>
           </CardHeader>
           <CardContent className="px-5 pb-4">
-            <InfoRow label="부동산">{contract.property?.name ?? '—'}</InfoRow>
+            <InfoRow label="부동산">
+              {contract.property
+                ? `${contract.property.building_name}${contract.property.unit_number ? ' ' + contract.property.unit_number : ''}`
+                : '—'}
+            </InfoRow>
             <InfoRow label="주소">{contract.property?.address_road ?? '—'}</InfoRow>
             <InfoRow label="계약유형">{contract.contract_type}</InfoRow>
             <InfoRow label="보증금">{formatKRW(contract.deposit_amount)}</InfoRow>

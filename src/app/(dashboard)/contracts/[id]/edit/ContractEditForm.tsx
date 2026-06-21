@@ -15,7 +15,8 @@ import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 
 interface Property {
   id: string
-  name: string
+  building_name: string
+  unit_number: string
   address_road: string | null
 }
 
@@ -133,7 +134,9 @@ export default function ContractEditForm({
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs text-gray-500">부동산</Label>
                 <p className="text-sm font-medium text-gray-800">
-                  {currentProp?.name ?? '—'}
+                  {currentProp
+                    ? `${currentProp.building_name}${currentProp.unit_number ? ' ' + currentProp.unit_number : ''}`
+                    : '—'}
                   {currentProp?.address_road ? ` · ${currentProp.address_road}` : ''}
                 </p>
               </div>

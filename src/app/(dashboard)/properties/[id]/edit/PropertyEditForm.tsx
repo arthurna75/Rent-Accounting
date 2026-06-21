@@ -14,7 +14,8 @@ import { ArrowLeft } from 'lucide-react'
 
 interface Property {
   id: string
-  name: string
+  building_name: string
+  unit_number: string
   address_road: string
   address_detail: string | null
   property_type: string
@@ -36,19 +37,20 @@ export default function PropertyEditForm({ property }: { property: Property }) {
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   const [form, setForm] = useState({
-    name: property.name,
-    address_road: property.address_road,
-    address_detail: property.address_detail ?? '',
-    property_type: property.property_type,
-    rental_tax_type: property.rental_tax_type,
-    acquisition_cost: property.acquisition_cost?.toString() ?? '',
-    acquisition_date: property.acquisition_date ?? '',
-    building_value: property.building_value?.toString() ?? '',
-    building_area: property.building_area?.toString() ?? '',
-    useful_life: property.useful_life.toString(),
+    building_name:       property.building_name,
+    unit_number:         property.unit_number,
+    address_road:        property.address_road,
+    address_detail:      property.address_detail ?? '',
+    property_type:       property.property_type,
+    rental_tax_type:     property.rental_tax_type,
+    acquisition_cost:    property.acquisition_cost?.toString() ?? '',
+    acquisition_date:    property.acquisition_date ?? '',
+    building_value:      property.building_value?.toString() ?? '',
+    building_area:       property.building_area?.toString() ?? '',
+    useful_life:         property.useful_life.toString(),
     depreciation_method: property.depreciation_method,
-    salvage_value: property.salvage_value.toString(),
-    notes: property.notes ?? '',
+    salvage_value:       property.salvage_value.toString(),
+    notes:               property.notes ?? '',
   })
 
   const set = (key: string, value: string) =>
@@ -62,15 +64,16 @@ export default function PropertyEditForm({ property }: { property: Property }) {
     setLoading(true)
     try {
       const body: Record<string, unknown> = {
-        name: form.name,
-        address_road: form.address_road,
-        property_type: form.property_type,
-        rental_tax_type: form.rental_tax_type,
-        acquisition_cost: parseFloat(form.acquisition_cost) || 0,
-        acquisition_date: form.acquisition_date,
-        useful_life: parseInt(form.useful_life) || 40,
+        building_name:       form.building_name,
+        unit_number:         form.unit_number,
+        address_road:        form.address_road,
+        property_type:       form.property_type,
+        rental_tax_type:     form.rental_tax_type,
+        acquisition_cost:    parseFloat(form.acquisition_cost) || 0,
+        acquisition_date:    form.acquisition_date,
+        useful_life:         parseInt(form.useful_life) || 40,
         depreciation_method: form.depreciation_method,
-        salvage_value: parseFloat(form.salvage_value) || 0,
+        salvage_value:       parseFloat(form.salvage_value) || 0,
       }
       if (form.address_detail) body.address_detail = form.address_detail
       if (form.building_value) body.building_value = parseFloat(form.building_value)
@@ -114,7 +117,10 @@ export default function PropertyEditForm({ property }: { property: Property }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{property.name}</CardTitle>
+          <CardTitle className="text-lg">
+            {property.building_name}
+            {property.unit_number && <span className="ml-2 text-sm font-normal text-gray-500">{property.unit_number}</span>}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -125,13 +131,24 @@ export default function PropertyEditForm({ property }: { property: Property }) {
             )}
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="name">부동산명 <span className="text-red-500">*</span></Label>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="building_name">건물명 <span className="text-red-500">*</span></Label>
                 <Input
-                  id="name"
-                  value={form.name}
-                  onChange={e => set('name', e.target.value)}
+                  id="building_name"
+                  value={form.building_name}
+                  onChange={e => set('building_name', e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="unit_number">호실 <span className="text-xs text-gray-400">(선택)</span></Label>
+                <Input
+                  id="unit_number"
+                  placeholder="예: 101호"
+                  value={form.unit_number}
+                  onChange={e => set('unit_number', e.target.value)}
                 />
               </div>
 
@@ -151,7 +168,7 @@ export default function PropertyEditForm({ property }: { property: Property }) {
                   id="address_detail"
                   value={form.address_detail}
                   onChange={e => set('address_detail', e.target.value)}
-                  placeholder="예: 101호"
+                  placeholder="예: 3층"
                 />
               </div>
 

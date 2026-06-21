@@ -20,7 +20,8 @@ type LeaseContract = {
 
 type Property = {
   id: string
-  name: string
+  building_name: string
+  unit_number: string
   address_road: string
   address_detail: string | null
   property_type: string
@@ -94,7 +95,10 @@ export default async function PropertyDetailPage({
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900">{property.name}</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {property.building_name}
+            {property.unit_number && <span className="ml-2 text-blue-600">{property.unit_number}</span>}
+          </h2>
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeBadgeClass[property.property_type] ?? typeBadgeClass['기타']}`}>
             {property.property_type}
           </span>
