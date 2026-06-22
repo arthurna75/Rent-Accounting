@@ -1,6 +1,9 @@
 /**
  * 손익통계 API — 월별 수익·비용 집계
  * GET /api/reports/pl-stats?year=2026
+ *
+ * balance-sheet / income-statement 와 동일하게 journal_entry_lines 에서
+ * embedded filter 단일 쿼리로 조회 (2단계 쿼리 방식 제거)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -14,66 +17,39 @@ export async function GET(req: NextRequest) {
     new URL(req.url).searchParams.get('year') ?? String(new Date().getFullYear()),
   )
 
-  // Step 1: 해당 연도의 posted 전표 ID 조회 (embedded filter 대신 2단계 쿼리로 안정성 확보)
-  const { data: entries, error: entryErr } = await supabase
-    .from('journal_entries')
-    .select('id, entry_date')
-    .gte('entry_date', `${year}-01-01`)
-    .lte('entry_date', `${year}-12-31`)
-    .eq('status', 'posted')
+  const fromDate = `${year}-01-01`
+  const toDate   = `${year}-12-31`
 
-  if (entryErr) return NextResponse.json({ error: entryErr.message }, { status: 500 })
-
-  const entryMap: Record<string, string> = {}
-  const entryIds: string[] = (entries ?? []).map(e => {
-    entryMap[e.id] = e.entry_date
-    return e.id
-  })
-
-  if (entryIds.length === 0) {
-    return NextResponse.json({
-      data: {
-        year,
-        revenues: [],
-        expenses: [],
-        revenue_by_month: Array(12).fill(0),
-        expense_by_month: Array(12).fill(0),
-        net_income_by_month: Array(12).fill(0),
-        total_revenue: 0,
-        total_expense: 0,
-        total_net_income: 0,
-      },
-    })
-  }
-
-  // Step 2: 해당 전표 ID의 라인 + 계정과목 조회
   const { data: lines, error } = await supabase
     .from('journal_entry_lines')
     .select(`
       debit_amount,
       credit_amount,
-      journal_entry_id,
       account:chart_of_accounts!account_id (
         code, name, account_type, normal_balance
+      ),
+      journal_entry:journal_entries!journal_entry_id (
+        entry_date, status
       )
     `)
-    .in('journal_entry_id', entryIds)
+    .gte('journal_entry.entry_date', fromDate)
+    .lte('journal_entry.entry_date', toDate)
+    .eq('journal_entry.status', 'posted')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   type AcctMeta = { code: string; name: string; account_type: string; normal_balance: string }
+  type EntryMeta = { entry_date: string; status: string }
 
-  // account_code → { meta, months[0..11] }
   const map: Record<string, { meta: AcctMeta; months: number[] }> = {}
 
   for (const line of lines ?? []) {
-    const acct = (line.account as unknown) as AcctMeta | null
-    if (!acct) continue
+    const acct  = (line.account as unknown)        as AcctMeta  | null
+    const entry = (line.journal_entry as unknown)  as EntryMeta | null
+    if (!acct || !entry) continue
     if (!['수익', '비용'].includes(acct.account_type)) continue
 
-    const entryDate = entryMap[line.journal_entry_id]
-    if (!entryDate) continue
-    const monthIdx = new Date(entryDate).getMonth()
+    const monthIdx = new Date(entry.entry_date).getMonth()
 
     if (!map[acct.code]) {
       map[acct.code] = { meta: acct, months: Array(12).fill(0) }
@@ -93,10 +69,10 @@ export async function GET(req: NextRequest) {
       .filter(e => e.meta.account_type === type)
       .sort((a, b) => a.meta.code.localeCompare(b.meta.code))
       .map(e => ({
-        code: e.meta.code,
-        name: e.meta.name,
+        code:   e.meta.code,
+        name:   e.meta.name,
         months: e.months,
-        total: e.months.reduce((s, v) => s + v, 0),
+        total:  e.months.reduce((s, v) => s + v, 0),
       }))
   }
 
@@ -119,12 +95,12 @@ export async function GET(req: NextRequest) {
       year,
       revenues,
       expenses,
-      revenue_by_month: revenueByMonth,
-      expense_by_month: expenseByMonth,
+      revenue_by_month:    revenueByMonth,
+      expense_by_month:    expenseByMonth,
       net_income_by_month: netByMonth,
-      total_revenue: totalRevenue,
-      total_expense: totalExpense,
-      total_net_income: totalNetIncome,
+      total_revenue:       totalRevenue,
+      total_expense:       totalExpense,
+      total_net_income:    totalNetIncome,
     },
   })
 }
