@@ -192,6 +192,7 @@ export interface Property {
   acquisition_cost: number
   land_value: number | null
   building_value: number | null
+  land_share_ratio: number | null  // 토지 지분율 (0~1)
   useful_life: number
   depreciation_method: DepreciationMethod
   salvage_value: number

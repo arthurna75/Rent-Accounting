@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types/database'
 import {
   LayoutDashboard, Building2, FileText, BookOpen,
-  BarChart3, Settings, Calculator, Receipt, List, X, TrendingUp, Store,
+  BarChart3, Settings, Calculator, Receipt, List, X, TrendingUp, Store, Wand2,
 } from 'lucide-react'
 
 interface NavItem {
@@ -20,6 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '대시보드',    href: '/',                             icon: LayoutDashboard, roles: ['owner','accountant','viewer'] },
   { label: '부동산',      href: '/properties',                   icon: Building2,       roles: ['owner','accountant','viewer'] },
   { label: '임대차계약',  href: '/contracts',                    icon: FileText,        roles: ['owner','accountant','viewer'] },
+  { label: '전환마법사',   href: '/accounting/wizard',            icon: Wand2,           roles: ['owner','accountant'] },
   { label: '분개장',      href: '/accounting/journal',           icon: BookOpen,        roles: ['owner','accountant'] },
   { label: '계정과목',    href: '/accounting/chart-of-accounts', icon: List,            roles: ['owner','accountant'] },
   { label: '거래처',      href: '/accounting/vendors',           icon: Store,           roles: ['owner','accountant'] },

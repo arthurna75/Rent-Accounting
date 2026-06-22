@@ -63,6 +63,7 @@ const mockProperty = (overrides = {}): Property => ({
   acquisition_cost: 500_000_000,
   land_value: 200_000_000,
   building_value: 300_000_000,
+  land_share_ratio: null,
   useful_life: 40,
   depreciation_method: '정액법',
   salvage_value: 0,
