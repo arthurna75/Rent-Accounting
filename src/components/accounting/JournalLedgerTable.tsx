@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatKRW } from '@/lib/utils/format'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, CheckCircle2 } from 'lucide-react'
 
 type EntryStatus = 'draft' | 'posted' | 'reversed'
 type EntryType = string
@@ -50,10 +50,11 @@ const TYPE_COLORS: Record<string, string> = {
 
 export function JournalLedgerTable({ entries, page, totalPages, total }: Props) {
   const router = useRouter()
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId]   = useState<string | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   async function handleDelete(id: string) {
-    if (!confirm('이 전표를 삭제하시겠습니까? draft 상태의 전표만 삭제됩니다.')) return
+    if (!confirm('이 전표를 삭제하시겠습니까? 임시 상태의 전표만 삭제됩니다.')) return
     setDeletingId(id)
     try {
       const res = await fetch(`/api/accounting/journal-entries/${id}`, { method: 'DELETE' })
@@ -65,6 +66,25 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
       router.refresh()
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function handleApprove(id: string) {
+    setApprovingId(id)
+    try {
+      const res = await fetch(`/api/accounting/journal-entries/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        alert(json.error ?? '확정에 실패했습니다.')
+        return
+      }
+      router.refresh()
+    } finally {
+      setApprovingId(null)
     }
   }
 
@@ -132,6 +152,14 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
                     <div className="flex items-center justify-center gap-1">
                       {entry.status === 'draft' && (
                         <>
+                          <button
+                            onClick={() => handleApprove(entry.id)}
+                            disabled={approvingId === entry.id}
+                            className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                            title="확정 (손익통계·보고서에 반영)"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
                           <Link
                             href={`/accounting/journal/${entry.id}/edit`}
                             className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"

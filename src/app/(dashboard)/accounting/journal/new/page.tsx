@@ -359,7 +359,7 @@ export default function NewJournalEntryPage() {
             contract_id:   contractId || undefined,
             property_id:   selectedContract?.property_id || undefined,
           })),
-          auto_post: false,
+          auto_post: true,
         }),
       })
       if (!res.ok) {
