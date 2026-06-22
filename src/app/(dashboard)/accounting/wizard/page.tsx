@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { WizardClient } from './WizardClient'
+import { SampleWizard } from '@/components/sample/SampleWizard'
 
 export default async function WizardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) return <SampleWizard isGuest />
 
   const { data: profile } = await supabase
     .from('user_profiles')
@@ -13,7 +14,9 @@ export default async function WizardPage() {
     .eq('id', user.id)
     .single()
 
-  if (!profile || !['owner', 'accountant'].includes(profile.role)) {
+  if (!profile) return <SampleWizard isGuest={false} />
+
+  if (!['owner', 'accountant'].includes(profile.role)) {
     redirect('/')
   }
 

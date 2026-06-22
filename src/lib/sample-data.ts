@@ -2,6 +2,50 @@
 // 예시(데모) 데이터 — 비로그인 또는 데이터 미등록 사용자에게 표시
 // -------------------------------------------------------
 
+// ------ 거래처 ------
+export const SAMPLE_VENDORS = [
+  { id: 'v1', name: '국민은행 마포지점',   business_number: '204-81-15252', memo: '임대사업자 통장 주거래은행' },
+  { id: 'v2', name: '삼성화재',             business_number: '302-86-00178', memo: '화재보험 계약처' },
+  { id: 'v3', name: '한국전력공사',         business_number: '130-82-00166', memo: '공용부 전기요금' },
+  { id: 'v4', name: '마포구청',             business_number: null,           memo: '재산세·취득세 납부처' },
+  { id: 'v5', name: '홍길동 인테리어',      business_number: '123-10-55432', memo: '수선·인테리어 거래처' },
+]
+
+// ------ 전환마법사 샘플 ------
+export const SAMPLE_WIZARD = {
+  buildingName: '한강빌라',
+  conversionDate: '2026-01-01',
+  rooms: [
+    { unitNumber: '101호', exclusiveArea: 42.5, landShareRatio: 4.17, landValue: 48_000_000, buildingValue: 72_000_000, acquisitionDate: '2019-04-15', tenantName: '김영수', depositAmount: 50_000_000, monthlyRent: 450_000, managementFee: 50_000, leaseStart: '2025-05-01', leaseEnd: '2027-04-30' },
+    { unitNumber: '102호', exclusiveArea: 42.5, landShareRatio: 4.17, landValue: 48_000_000, buildingValue: 72_000_000, acquisitionDate: '2019-04-15', tenantName: '이미래', depositAmount: 50_000_000, monthlyRent: 450_000, managementFee: 50_000, leaseStart: '2024-09-01', leaseEnd: '2026-08-31' },
+    { unitNumber: '201호', exclusiveArea: 48.2, landShareRatio: 4.73, landValue: 55_000_000, buildingValue: 82_000_000, acquisitionDate: '2019-04-15', tenantName: '박준호', depositAmount: 60_000_000, monthlyRent: 500_000, managementFee: 50_000, leaseStart: '2026-01-01', leaseEnd: '2027-12-31' },
+    { unitNumber: '202호', exclusiveArea: 48.2, landShareRatio: 4.73, landValue: 55_000_000, buildingValue: 82_000_000, acquisitionDate: '2019-04-15', tenantName: null,    depositAmount: 0,          monthlyRent: 0,       managementFee: null,   leaseStart: null,         leaseEnd: null },
+  ],
+  accounts: { land: '토지', building: '건물', deposit: '임대보증금', loan: '장기차입금', capital: '자본금' },
+  loanAmount: 100_000_000,
+  totals: {
+    land:    206_000_000,
+    building: 308_000_000,
+    deposit: 160_000_000,
+    rent:    1_400_000,
+  },
+  journalLines: [
+    { side: '차변' as const, account: '토지',      unit: '101호', amount: 48_000_000 },
+    { side: '차변' as const, account: '토지',      unit: '102호', amount: 48_000_000 },
+    { side: '차변' as const, account: '토지',      unit: '201호', amount: 55_000_000 },
+    { side: '차변' as const, account: '토지',      unit: '202호', amount: 55_000_000 },
+    { side: '차변' as const, account: '건물',      unit: '101호', amount: 72_000_000 },
+    { side: '차변' as const, account: '건물',      unit: '102호', amount: 72_000_000 },
+    { side: '차변' as const, account: '건물',      unit: '201호', amount: 82_000_000 },
+    { side: '차변' as const, account: '건물',      unit: '202호', amount: 82_000_000 },
+    { side: '대변' as const, account: '임대보증금', unit: '101호', amount: 50_000_000 },
+    { side: '대변' as const, account: '임대보증금', unit: '102호', amount: 50_000_000 },
+    { side: '대변' as const, account: '임대보증금', unit: '201호', amount: 60_000_000 },
+    { side: '대변' as const, account: '장기차입금', unit: undefined, amount: 100_000_000 },
+    { side: '대변' as const, account: '자본금',     unit: undefined, amount: 254_000_000 },
+  ],
+}
+
 export const SAMPLE_ORG = {
   name: '홍길동 임대사업',
   owner_name: '홍길동',
