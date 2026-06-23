@@ -8,7 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import Link from 'next/link'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Pencil, RefreshCw } from 'lucide-react'
 import ContractTerminateButton from './TerminateButton'
 
 interface PageProps {
@@ -152,6 +152,14 @@ export default async function ContractDetailPage({ params }: PageProps) {
           {statusBadge(contract.status)}
         </div>
         <div className="flex items-center gap-2">
+          {isActive && (
+            <Link href={`/contracts/${id}/renew`}>
+              <Button variant="outline" size="sm" className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                <RefreshCw className="w-3.5 h-3.5" />
+                계약 갱신
+              </Button>
+            </Link>
+          )}
           {isActive && (
             <Link href={`/contracts/${id}/edit`}>
               <Button variant="outline" size="sm" className="gap-1.5">
