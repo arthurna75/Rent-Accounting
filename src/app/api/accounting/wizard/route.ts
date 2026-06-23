@@ -2,21 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getFiscalYear } from '@/lib/accounting/journal-service'
 
-interface RoomInput {
-  propertyId?: string
-  contractId?: string
+// Step 3에서 전달되는, 이미 저장된 호실 정보 (Step 1→2에서 /properties로 저장)
+interface SavedRoom {
   unitNumber: string
-  exclusiveArea: number | null
-  landShareRatio: number | null
+  propertyId: string
+  contractId: string | null
   landValue: number
   buildingValue: number
-  acquisitionDate: string
-  tenantName: string | null
   depositAmount: number
-  monthlyRent: number
-  managementFee: number | null
-  leaseStart: string | null
-  leaseEnd: string | null
+  tenantName: string | null
 }
 
 interface AccountsInput {
@@ -27,10 +21,10 @@ interface AccountsInput {
   capital_id: string
 }
 
-interface WizardPayload {
+interface JournalPayload {
   buildingName: string
   conversionDate: string
-  rooms: RoomInput[]
+  savedRooms: SavedRoom[]
   accounts: AccountsInput
   loanAmount: number
 }
@@ -51,121 +45,14 @@ export async function POST(req: NextRequest) {
   }
 
   const orgId = profile.organization_id
-  const body: WizardPayload = await req.json()
-  const { buildingName, conversionDate, rooms, accounts, loanAmount } = body
+  const body: JournalPayload = await req.json()
+  const { buildingName, conversionDate, savedRooms, accounts, loanAmount } = body
 
-  if (!buildingName || !conversionDate || !rooms?.length) {
+  if (!buildingName || !conversionDate || !savedRooms?.length) {
     return NextResponse.json({ error: '필수 항목이 누락되었습니다.' }, { status: 422 })
   }
 
-  // ── 1. 호실별 property upsert ───────────────────────────
-  const propertyIds: Record<string, string> = {}  // unitNumber → property_id
-
-  for (const room of rooms) {
-    const propData = {
-      organization_id: orgId,
-      building_name:   buildingName,
-      unit_number:     room.unitNumber,
-      property_type:   '다세대' as const,
-      rental_tax_type: '면세' as const,
-      address_road:    buildingName,
-      acquisition_date: room.acquisitionDate,
-      acquisition_cost: room.landValue + room.buildingValue,
-      land_value:       room.landValue || null,
-      building_value:   room.buildingValue || null,
-      land_share_ratio: room.landShareRatio ?? null,
-      building_area:    room.exclusiveArea ?? null,
-      useful_life:      40,
-      depreciation_method: '정액법' as const,
-      salvage_value:    0,
-      is_active:        true,
-    }
-
-    if (room.propertyId) {
-      const { error } = await supabase
-        .from('properties')
-        .update(propData)
-        .eq('id', room.propertyId)
-        .eq('organization_id', orgId)
-
-      if (error) return NextResponse.json({ error: `호실 수정 실패(${room.unitNumber}): ${error.message}` }, { status: 500 })
-      propertyIds[room.unitNumber] = room.propertyId
-    } else {
-      const { data: newProp, error } = await supabase
-        .from('properties')
-        .insert(propData)
-        .select('id')
-        .single()
-
-      if (error || !newProp) return NextResponse.json({ error: `호실 등록 실패(${room.unitNumber}): ${error?.message}` }, { status: 500 })
-      propertyIds[room.unitNumber] = newProp.id
-    }
-  }
-
-  // ── 2. 계약 upsert ───────────────────────────────────────
-  const contractIds: Record<string, string> = {}  // unitNumber → contract_id
-
-  // 신규 계약 번호 생성용: 오늘 날짜 기준 count
-  const today = conversionDate  // 전환기준일을 계약일로 사용
-  const prefix = today.replace(/-/g, '')
-  const { count: existingCount } = await supabase
-    .from('lease_contracts')
-    .select('*', { count: 'exact', head: true })
-    .eq('organization_id', orgId)
-    .like('contract_number', `${prefix}_%`)
-
-  let seqCounter = (existingCount ?? 0) + 1
-
-  for (const room of rooms) {
-    const propId = propertyIds[room.unitNumber]
-    if (!propId) continue
-
-    if (room.tenantName && room.tenantName.trim()) {
-      const contractType = room.monthlyRent > 0 ? '월세' as const : '전세' as const
-      const contractData = {
-        organization_id:        orgId,
-        property_id:            propId,
-        lessee_name:            room.tenantName.trim(),
-        contract_type:          contractType,
-        start_date:             room.leaseStart ?? conversionDate,
-        end_date:               room.leaseEnd ?? conversionDate,
-        deposit_amount:         room.depositAmount,
-        monthly_rent:           room.monthlyRent,
-        monthly_management_fee: room.managementFee ?? null,
-        vat_included:           false,
-        payment_due_day:        1,
-        auto_renewal:           false,
-        auto_journal_rent:      false,
-        auto_journal_mgmt:      false,
-        status:                 'active' as const,
-      }
-
-      if (room.contractId) {
-        const { error } = await supabase
-          .from('lease_contracts')
-          .update(contractData)
-          .eq('id', room.contractId)
-          .eq('organization_id', orgId)
-
-        if (error) return NextResponse.json({ error: `계약 수정 실패(${room.unitNumber}): ${error.message}` }, { status: 500 })
-        contractIds[room.unitNumber] = room.contractId
-      } else {
-        const contractNumber = `${prefix}_${String(seqCounter).padStart(2, '0')}`
-        seqCounter++
-
-        const { data: newContract, error } = await supabase
-          .from('lease_contracts')
-          .insert({ ...contractData, contract_number: contractNumber })
-          .select('id')
-          .single()
-
-        if (error || !newContract) return NextResponse.json({ error: `계약 등록 실패(${room.unitNumber}): ${error?.message}` }, { status: 500 })
-        contractIds[room.unitNumber] = newContract.id
-      }
-    }
-  }
-
-  // ── 3. 개시분개 생성 ─────────────────────────────────────
+  // ── 회계연도 및 전표번호 ────────────────────────────────
   const entryYear = new Date(conversionDate).getFullYear()
 
   let fiscalYear
@@ -182,7 +69,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '전표번호 채번 실패' }, { status: 500 })
   }
 
-  // 전표 헤더
+  // ── 전표 헤더 INSERT ─────────────────────────────────────
   const { data: entry, error: entryError } = await supabase
     .from('journal_entries')
     .insert({
@@ -202,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `전표 저장 실패: ${entryError?.message}` }, { status: 500 })
   }
 
-  // 분개 라인 빌드 (account_id 직접 사용)
+  // ── 분개 라인 빌드 ────────────────────────────────────────
   const lines: Array<{
     journal_entry_id: string
     organization_id: string
@@ -218,8 +105,8 @@ export async function POST(req: NextRequest) {
   let order = 0
 
   // 차변: 호실별 토지
-  for (const room of rooms) {
-    if (room.landValue > 0 && propertyIds[room.unitNumber]) {
+  for (const room of savedRooms) {
+    if (room.landValue > 0) {
       lines.push({
         journal_entry_id: entry.id,
         organization_id:  orgId,
@@ -227,7 +114,7 @@ export async function POST(req: NextRequest) {
         debit_amount:     room.landValue,
         credit_amount:    0,
         description:      `${room.unitNumber} 토지`,
-        property_id:      propertyIds[room.unitNumber],
+        property_id:      room.propertyId,
         contract_id:      null,
         line_order:       order++,
       })
@@ -235,8 +122,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 차변: 호실별 건물
-  for (const room of rooms) {
-    if (room.buildingValue > 0 && propertyIds[room.unitNumber]) {
+  for (const room of savedRooms) {
+    if (room.buildingValue > 0) {
       lines.push({
         journal_entry_id: entry.id,
         organization_id:  orgId,
@@ -244,17 +131,17 @@ export async function POST(req: NextRequest) {
         debit_amount:     room.buildingValue,
         credit_amount:    0,
         description:      `${room.unitNumber} 건물`,
-        property_id:      propertyIds[room.unitNumber],
+        property_id:      room.propertyId,
         contract_id:      null,
         line_order:       order++,
       })
     }
   }
 
-  // 대변: 호실별 임대보증금
+  // 대변: 호실별 임대보증금 (임차인 있는 경우)
   if (accounts.deposit_id) {
-    for (const room of rooms) {
-      if (room.depositAmount > 0 && room.tenantName?.trim() && propertyIds[room.unitNumber]) {
+    for (const room of savedRooms) {
+      if (room.depositAmount > 0 && room.tenantName?.trim()) {
         lines.push({
           journal_entry_id: entry.id,
           organization_id:  orgId,
@@ -262,8 +149,8 @@ export async function POST(req: NextRequest) {
           debit_amount:     0,
           credit_amount:    room.depositAmount,
           description:      `${room.unitNumber} 임대보증금 (${room.tenantName})`,
-          property_id:      propertyIds[room.unitNumber],
-          contract_id:      contractIds[room.unitNumber] ?? null,
+          property_id:      room.propertyId,
+          contract_id:      room.contractId,
           line_order:       order++,
         })
       }
@@ -285,7 +172,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // 대변: 자본금 (균형액)
+  // 대변: 자본금 (차변-대변 균형액)
   const totalDebit  = lines.reduce((s, l) => s + l.debit_amount,  0)
   const totalCredit = lines.reduce((s, l) => s + l.credit_amount, 0)
   const capitalAmount = totalDebit - totalCredit
@@ -303,7 +190,6 @@ export async function POST(req: NextRequest) {
       line_order:       order++,
     })
   } else if (capitalAmount < 0) {
-    // 불균형 — 헤더 롤백 후 에러
     await supabase.from('journal_entries').delete().eq('id', entry.id)
     return NextResponse.json({ error: `분개 불균형: 자본금이 음수(${capitalAmount}원)입니다.` }, { status: 422 })
   }
