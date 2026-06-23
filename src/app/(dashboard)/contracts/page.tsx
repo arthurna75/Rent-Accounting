@@ -140,13 +140,20 @@ export default async function ContractsPage({ searchParams }: PageProps) {
     .from('lease_contracts')
     .select('*, property:properties!property_id(building_name, unit_number)')
     .eq('organization_id', profile!.organization_id)
-    .order('end_date', { ascending: true })
 
   if (activeStatus) query = query.eq('status', activeStatus)
   if (buildingPropIds) query = query.in('property_id', buildingPropIds)
 
   const { data: contracts } = await query
-  const list = (contracts ?? []) as unknown as LeaseContract[]
+  const list = ((contracts ?? []) as unknown as LeaseContract[]).sort((a, b) => {
+    const bldA = a.property?.building_name ?? ''
+    const bldB = b.property?.building_name ?? ''
+    const bldCmp = bldA.localeCompare(bldB, 'ko')
+    if (bldCmp !== 0) return bldCmp
+    const unitA = a.property?.unit_number ?? ''
+    const unitB = b.property?.unit_number ?? ''
+    return unitA.localeCompare(unitB, 'ko', { numeric: true })
+  })
 
   const tabCountKey = (key: string | undefined) => key ?? 'all'
   const buildingQs = selectedBuilding ? `&building=${encodeURIComponent(selectedBuilding)}` : ''
