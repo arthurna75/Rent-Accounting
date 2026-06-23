@@ -307,6 +307,11 @@ export interface Vendor {
   is_active: boolean
   created_at: string
   updated_at: string
+  category: '중개업' | '공공기관' | '수리업' | '판매업' | '기타' | null
+  representative: string | null
+  phone: string | null
+  address: string | null
+  registered_at: string | null
 }
 
 export interface JournalEntry {
