@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -28,7 +27,6 @@ const QUICK_LINKS = [
 ]
 
 export function Header({ user, organization, onMenuClick }: HeaderProps) {
-  const router = useRouter()
   const supabase = createClient()
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login')
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -38,7 +36,7 @@ export function Header({ user, organization, onMenuClick }: HeaderProps) {
 
   async function handleSignOut() {
     await supabase.auth.signOut()
-    router.push('/')
+    window.location.href = '/'
   }
 
   return (
