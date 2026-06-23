@@ -50,6 +50,7 @@ interface LeaseContract {
   lessee_name: string
   lessee_phone: string | null
   lessee_email: string | null
+  lessee_id_number: string | null
   contract_type: ContractType
   deposit_amount: number
   monthly_rent: number
@@ -201,6 +202,11 @@ export default async function ContractDetailPage({ params }: PageProps) {
             </InfoRow>
             <InfoRow label="연락처">{contract.lessee_phone ?? '—'}</InfoRow>
             <InfoRow label="이메일">{contract.lessee_email ?? '—'}</InfoRow>
+            {contract.lessee_id_number && (
+              <InfoRow label="주민번호">
+                {contract.lessee_id_number.split('-')[0]}-{contract.lessee_id_number.split('-')[1]}●●●●●●
+              </InfoRow>
+            )}
             {contract.notes && (
               <InfoRow label="메모">{contract.notes}</InfoRow>
             )}

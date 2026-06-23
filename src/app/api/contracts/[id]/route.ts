@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const body = await req.json()
   const allowedFields = [
-    'property_id', 'lessee_name', 'lessee_phone', 'lessee_email',
+    'property_id', 'lessee_name', 'lessee_phone', 'lessee_email', 'lessee_id_number',
     'contract_type', 'contract_date', 'start_date', 'end_date',
     'deposit_amount', 'monthly_rent', 'monthly_management_fee',
     'payment_due_day', 'vat_included',

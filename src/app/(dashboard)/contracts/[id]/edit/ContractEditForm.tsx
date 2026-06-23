@@ -29,6 +29,7 @@ interface LeaseContract {
   lessee_name: string
   lessee_phone: string | null
   lessee_email: string | null
+  lessee_id_number: string | null
   contract_type: string
   contract_number: string
   contract_date: string | null
@@ -86,11 +87,15 @@ export default function ContractEditForm({
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>(contract.attachment_urls ?? [])
 
+  const [idFront, idBack] = (contract.lessee_id_number ?? '').split('-')
+
   const [form, setForm] = useState({
     property_id:            contract.property_id,
     lessee_name:            contract.lessee_name,
     lessee_phone:           contract.lessee_phone ?? '',
     lessee_email:           contract.lessee_email ?? '',
+    lessee_id_front:        idFront ?? '',
+    lessee_id_back:         idBack ?? '',
     contract_type:          contract.contract_type,
     contract_date:          contract.contract_date ?? '',
     start_date:             contract.start_date,
@@ -139,6 +144,9 @@ export default function ContractEditForm({
         lessee_name:            form.lessee_name,
         lessee_phone:           form.lessee_phone || null,
         lessee_email:           form.lessee_email || null,
+        lessee_id_number:       form.lessee_id_front
+                                  ? `${form.lessee_id_front}-${form.lessee_id_back}`
+                                  : null,
         contract_type:          form.contract_type,
         contract_date:          form.contract_date || null,
         start_date:             form.start_date,
@@ -324,6 +332,29 @@ export default function ContractEditForm({
                   onChange={e => setStr('lessee_email', e.target.value)}
                   placeholder="example@email.com"
                 />
+              </div>
+              {/* 주민번호 */}
+              <div className="col-span-2 space-y-1.5">
+                <Label>주민번호</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    className="w-32 tabular-nums"
+                    maxLength={6}
+                    value={form.lessee_id_front}
+                    onChange={e => setStr('lessee_id_front', digits(e.target.value).slice(0, 6))}
+                    placeholder="앞 6자리"
+                  />
+                  <span className="text-gray-400">-</span>
+                  <Input
+                    className="w-16 tabular-nums"
+                    maxLength={1}
+                    value={form.lessee_id_back}
+                    onChange={e => setStr('lessee_id_back', digits(e.target.value).slice(0, 1))}
+                    placeholder="1"
+                  />
+                  <span className="text-sm text-gray-400">●●●●●●</span>
+                  <span className="text-xs text-gray-400 ml-1">(뒷자리 첫 번호만 저장)</span>
+                </div>
               </div>
             </div>
           </CardContent>
