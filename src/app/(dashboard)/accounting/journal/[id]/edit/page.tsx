@@ -128,7 +128,7 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
       // 전표 데이터 세팅
       const entry = entryJson.data
       if (!entry) { setError('전표를 찾을 수 없습니다.'); setLoading(false); return }
-      if (entry.status !== 'draft') { setError('draft 상태의 전표만 수정할 수 있습니다.'); setLoading(false); return }
+      if (entry.status === 'reversed') { setError('역분개된 전표는 수정할 수 없습니다.'); setLoading(false); return }
 
       setEntryDate(entry.entry_date)
       setEntryType(entry.entry_type)

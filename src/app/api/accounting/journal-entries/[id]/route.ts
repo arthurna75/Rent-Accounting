@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 })
     }
 
-    // draft 상태 + 조직 확인
+    // 조직 소속 + 역분개 여부 확인
     const { data: existing, error: fetchErr } = await supabase
       .from('journal_entries')
       .select('id, status')
@@ -98,8 +98,8 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       .single()
 
     if (fetchErr || !existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    if ((existing.status as JournalEntryStatus) !== 'draft') {
-      return NextResponse.json({ error: 'draft 상태의 전표만 수정할 수 있습니다.' }, { status: 409 })
+    if ((existing.status as JournalEntryStatus) === 'reversed') {
+      return NextResponse.json({ error: '역분개된 전표는 수정할 수 없습니다.' }, { status: 409 })
     }
 
     // 대차 밸런스 검증
@@ -166,6 +166,26 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: true })
   }
 
+  if (body.action === 'update_attachments') {
+    const { data: existing } = await supabase
+      .from('journal_entries')
+      .select('id')
+      .eq('id', id)
+      .eq('organization_id', profile.organization_id)
+      .single()
+
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const urls = Array.isArray(body.attachment_urls) ? body.attachment_urls : []
+    const { error: updateErr } = await supabase
+      .from('journal_entries')
+      .update({ attachment_urls: urls })
+      .eq('id', id)
+
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }
 
@@ -224,7 +244,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteContext) {
 
   if (!profile) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // draft 상태인지 확인 (org 소속 검증 포함)
+  // 조직 소속 + 역분개 여부 확인
   const { data: entry, error: fetchError } = await supabase
     .from('journal_entries')
     .select('id, status')
@@ -236,8 +256,8 @@ export async function DELETE(_req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  if ((entry.status as JournalEntryStatus) !== 'draft') {
-    return NextResponse.json({ error: 'draft 상태의 전표만 삭제할 수 있습니다.' }, { status: 409 })
+  if ((entry.status as JournalEntryStatus) === 'reversed') {
+    return NextResponse.json({ error: '역분개된 전표는 삭제할 수 없습니다.' }, { status: 409 })
   }
 
   // 명세 먼저 삭제

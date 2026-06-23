@@ -15,6 +15,7 @@ import {
 import { formatKRW, formatDate } from '@/lib/utils/format'
 import { ArrowLeft } from 'lucide-react'
 import { JournalActions } from './JournalActions'
+import { JournalAttachmentPanel } from './JournalAttachmentPanel'
 
 type EntryLine = {
   id: string
@@ -37,6 +38,7 @@ type EntryDetail = {
   reference_type: string | null
   created_at: string
   approved_at: string | null
+  attachment_urls: string[] | null
   lines: EntryLine[]
 }
 
@@ -86,7 +88,7 @@ export default async function JournalDetailPage({
     .select(`
       id, entry_number, entry_date, description, entry_type, status,
       is_reversed, reversed_by, reference_id, reference_type,
-      created_at, approved_at, organization_id,
+      created_at, approved_at, attachment_urls, organization_id,
       lines:journal_entry_lines (
         id, debit_amount, credit_amount, description,
         account:chart_of_accounts!account_id (code, name, account_type)
@@ -224,6 +226,20 @@ export default async function JournalDetailPage({
               </TableRow>
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* 첨부 파일 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">첨부 파일</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <JournalAttachmentPanel
+            entryId={entry.id}
+            initialUrls={entry.attachment_urls ?? []}
+            canEdit={canApprove && entry.status !== 'reversed'}
+          />
         </CardContent>
       </Card>
 
