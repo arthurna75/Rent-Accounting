@@ -225,8 +225,10 @@ export function WizardClient({ existingProperties, existingContracts, accounts }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, landAccId, buildingAccId, depositAccId, loanAccId, capitalAccId, loan, capital])
 
-  const previewDebit  = previewLines.filter(l => l.side === '차변').reduce((s, l) => s + l.amount, 0)
-  const previewCredit = previewLines.filter(l => l.side === '대변').reduce((s, l) => s + l.amount, 0)
+  const debitLines    = previewLines.filter(l => l.side === '차변')
+  const creditLines   = previewLines.filter(l => l.side === '대변')
+  const previewDebit  = debitLines.reduce((s, l) => s + l.amount, 0)
+  const previewCredit = creditLines.reduce((s, l) => s + l.amount, 0)
   const isBalanced    = previewDebit > 0 && Math.abs(previewDebit - previewCredit) < 1
 
   // ── 유효성 검사 ──
@@ -672,45 +674,106 @@ export function WizardClient({ existingProperties, existingContracts, accounts }
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border border-gray-100">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600 w-16">구분</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">계정과목</th>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600 w-20">호실</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600 w-36">금액 (원)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {previewLines.map((line, i) => (
-                    <tr key={i} className={line.side === '차변' ? 'bg-blue-50/30' : 'bg-red-50/20'}>
-                      <td className="px-4 py-2">
-                        <span className={cn(
-                          'text-xs font-bold px-1.5 py-0.5 rounded',
-                          line.side === '차변' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600',
-                        )}>
-                          {line.side}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-gray-800">{line.accountName}</td>
-                      <td className="px-4 py-2 text-gray-500 text-xs">{line.unitNumber ?? ''}</td>
-                      <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(line.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-gray-200 bg-gray-50">
-                  <tr>
-                    <td className="px-4 py-2 text-xs font-bold text-gray-600" colSpan={3}>합계</td>
-                    <td className="px-4 py-2 text-right">
-                      <span className={cn('text-sm font-bold tabular-nums', isBalanced ? 'text-green-700' : 'text-red-600')}>
-                        차변 {fmt(previewDebit)} / 대변 {fmt(previewCredit)}
-                        {isBalanced ? ' ✓ 균형' : ' ✗ 불균형'}
-                      </span>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+            {/* T계정 2단 레이아웃 */}
+            <div className="rounded-lg border border-gray-200 overflow-hidden text-sm">
+
+              {/* 헤더 행: 차변 | 대변 */}
+              <div className="grid grid-cols-2 divide-x divide-gray-200">
+                <div className="flex items-center gap-2 px-4 py-2 bg-blue-50">
+                  <span className="font-bold text-blue-700">차변 (Debit)</span>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50">
+                  <span className="font-bold text-red-700">대변 (Credit)</span>
+                </div>
+              </div>
+
+              {/* 컬럼 서브헤더 */}
+              <div className="grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100 bg-gray-50/60">
+                <div className="grid grid-cols-[1fr_9rem]">
+                  <span className="px-4 py-1.5 text-xs text-gray-500 font-medium">계정과목</span>
+                  <span className="px-4 py-1.5 text-xs text-gray-500 font-medium text-right">금액 (원)</span>
+                </div>
+                <div className="grid grid-cols-[1fr_9rem]">
+                  <span className="px-4 py-1.5 text-xs text-gray-500 font-medium">계정과목</span>
+                  <span className="px-4 py-1.5 text-xs text-gray-500 font-medium text-right">금액 (원)</span>
+                </div>
+              </div>
+
+              {/* 데이터 행 */}
+              {Array.from({ length: Math.max(debitLines.length, creditLines.length) }).map((_, i) => {
+                const d = debitLines[i]
+                const c = creditLines[i]
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      'grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-50',
+                      i % 2 === 1 ? 'bg-gray-50/40' : '',
+                    )}
+                  >
+                    {/* 차변 셀 */}
+                    <div className="grid grid-cols-[1fr_9rem] items-center py-2">
+                      {d ? (
+                        <>
+                          <span className="px-4 text-gray-800 truncate">
+                            {d.accountName}
+                            {d.unitNumber && (
+                              <span className="ml-1.5 text-xs text-gray-400 font-normal">({d.unitNumber})</span>
+                            )}
+                          </span>
+                          <span className="px-4 tabular-nums font-medium text-right text-blue-800">
+                            {fmt(d.amount)}
+                          </span>
+                        </>
+                      ) : <span className="col-span-2" />}
+                    </div>
+                    {/* 대변 셀 */}
+                    <div className="grid grid-cols-[1fr_9rem] items-center py-2">
+                      {c ? (
+                        <>
+                          <span className="px-4 text-gray-800 truncate">
+                            {c.accountName}
+                            {c.unitNumber && (
+                              <span className="ml-1.5 text-xs text-gray-400 font-normal">({c.unitNumber})</span>
+                            )}
+                          </span>
+                          <span className="px-4 tabular-nums font-medium text-right text-red-800">
+                            {fmt(c.amount)}
+                          </span>
+                        </>
+                      ) : <span className="col-span-2" />}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* 합계 행 */}
+              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50">
+                <div className="grid grid-cols-[1fr_9rem] items-center py-2.5">
+                  <span className="px-4 text-xs font-bold text-gray-600">합 계</span>
+                  <span className={cn(
+                    'px-4 tabular-nums font-bold text-right',
+                    isBalanced ? 'text-blue-700' : 'text-red-600',
+                  )}>
+                    {fmt(previewDebit)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-[1fr_9rem] items-center py-2.5">
+                  <span className="px-4 text-xs font-bold text-gray-600">
+                    합 계
+                    {isBalanced
+                      ? <span className="ml-2 text-green-600 font-semibold">✓ 균형</span>
+                      : <span className="ml-2 text-red-500 font-semibold">✗ 불균형</span>
+                    }
+                  </span>
+                  <span className={cn(
+                    'px-4 tabular-nums font-bold text-right',
+                    isBalanced ? 'text-blue-700' : 'text-red-600',
+                  )}>
+                    {fmt(previewCredit)}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {!isBalanced && (
