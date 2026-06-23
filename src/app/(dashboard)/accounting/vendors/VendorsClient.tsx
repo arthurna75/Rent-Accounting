@@ -14,6 +14,10 @@ import type { Vendor } from '@/types/database'
 const CATEGORIES = ['중개업', '공공기관', '수리업', '판매업', '기타'] as const
 type Category = (typeof CATEGORIES)[number]
 
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
 function formatBizNum(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 10)
   if (digits.length <= 3) return digits
@@ -21,22 +25,37 @@ function formatBizNum(value: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`
 }
 
-const EMPTY_FORM = {
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.startsWith('02')) {
+    const d = digits.slice(0, 10)
+    if (d.length <= 2) return d
+    if (d.length <= 5) return `${d.slice(0, 2)}-${d.slice(2)}`
+    const mid = d.length <= 9 ? 3 : 4
+    return `${d.slice(0, 2)}-${d.slice(2, 2 + mid)}-${d.slice(2 + mid)}`
+  }
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  const mid = digits.length <= 10 ? 3 : 4
+  return `${digits.slice(0, 3)}-${digits.slice(3, 3 + mid)}-${digits.slice(3 + mid)}`
+}
+
+const makeEmptyForm = () => ({
   name: '',
   businessNumber: '',
   category: '기타' as Category,
   representative: '',
   phone: '',
   address: '',
-  registeredAt: '',
+  registeredAt: todayStr(),
   memo: '',
-}
+})
 
 export function VendorsClient({ initial }: { initial: Vendor[] }) {
   const [vendors, setVendors] = useState<Vendor[]>(initial)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(makeEmptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,7 +69,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
 
   function openCreate() {
     setEditingId(null)
-    setForm(EMPTY_FORM)
+    setForm(makeEmptyForm())
     setError(null)
     setShowForm(true)
   }
@@ -64,7 +83,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       representative: v.representative ?? '',
       phone: v.phone ?? '',
       address: v.address ?? '',
-      registeredAt: v.registered_at ?? '',
+      registeredAt: v.registered_at ?? todayStr(),
       memo: v.memo ?? '',
     })
     setError(null)
@@ -77,7 +96,10 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     setError(null)
   }
 
-  function setField<K extends keyof typeof EMPTY_FORM>(key: K, value: (typeof EMPTY_FORM)[K]) {
+  function setField<K extends keyof ReturnType<typeof makeEmptyForm>>(
+    key: K,
+    value: ReturnType<typeof makeEmptyForm>[K]
+  ) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
@@ -153,12 +175,12 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="v_name">거래처명 <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="v_date">등록일자</Label>
                   <Input
-                    id="v_name"
-                    value={form.name}
-                    onChange={e => setField('name', e.target.value)}
-                    placeholder="예) 삼성화재, 국민은행"
+                    id="v_date"
+                    type="date"
+                    value={form.registeredAt}
+                    onChange={e => setField('registeredAt', e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -178,13 +200,12 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="v_biz">사업자번호</Label>
+                  <Label htmlFor="v_name">거래처명 <span className="text-red-500">*</span></Label>
                   <Input
-                    id="v_biz"
-                    value={form.businessNumber}
-                    onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
-                    placeholder="000-00-00000"
-                    maxLength={12}
+                    id="v_name"
+                    value={form.name}
+                    onChange={e => setField('name', e.target.value)}
+                    placeholder="예) 삼성화재, 국민은행"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -197,21 +218,23 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="v_biz">사업자번호</Label>
+                  <Input
+                    id="v_biz"
+                    value={form.businessNumber}
+                    onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
+                    placeholder="000-00-00000"
+                    maxLength={12}
+                  />
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="v_phone">전화</Label>
                   <Input
                     id="v_phone"
                     value={form.phone}
-                    onChange={e => setField('phone', e.target.value)}
+                    onChange={e => setField('phone', formatPhone(e.target.value))}
                     placeholder="02-1234-5678"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="v_date">등록일자</Label>
-                  <Input
-                    id="v_date"
-                    type="date"
-                    value={form.registeredAt}
-                    onChange={e => setField('registeredAt', e.target.value)}
+                    maxLength={13}
                   />
                 </div>
                 <div className="col-span-2 space-y-1.5">
@@ -250,36 +273,38 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[900px]">
+            <table className="w-full text-sm min-w-[1000px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">거래처명</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-28">등록일자</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 w-20">분류</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">거래처명</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 w-24">대표자</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 w-32">전화</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600 w-36">사업자번호</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">주소</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-28">등록일자</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-40">주소</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-32">메모</th>
                   <th className="px-4 py-3 w-20"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {vendors.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-10 text-gray-400">
+                    <td colSpan={9} className="text-center py-10 text-gray-400">
                       등록된 거래처가 없습니다.
                     </td>
                   </tr>
                 )}
                 {vendors.map(v => (
                   <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{v.name}</td>
+                    <td className="px-4 py-3 text-gray-500">{v.registered_at ?? '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{v.category ?? '-'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{v.name}</td>
                     <td className="px-4 py-3 text-gray-600">{v.representative ?? '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{v.phone ?? '-'}</td>
                     <td className="px-4 py-3 text-gray-500">{v.business_number ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{v.address ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-500">{v.registered_at ?? '-'}</td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[10rem] truncate">{v.address ?? '-'}</td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[8rem] truncate">{v.memo ?? '-'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <Button
