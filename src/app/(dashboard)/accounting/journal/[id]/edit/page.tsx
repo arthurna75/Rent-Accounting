@@ -1,18 +1,45 @@
 'use client'
 
-import { useState, useEffect, use, useMemo } from 'react'
+import { useState, useEffect, use, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckCircle2, AlertTriangle, Paperclip, X, FileText, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import type { EvidenceType, JournalEntryType, Vendor } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { cn } from '@/lib/utils'
+
+async function resizeImage(file: File, maxWidth = 800): Promise<File> {
+  if (!file.type.startsWith('image/')) return file
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const ratio = img.width > maxWidth ? maxWidth / img.width : 1
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * ratio)
+        canvas.height = Math.round(img.height * ratio)
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(
+          (blob) => resolve(new File([blob!], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })),
+          'image/jpeg', 0.85,
+        )
+      }
+      img.src = e.target!.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function isImageUrl(url: string) {
+  return /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(url)
+}
 
 interface Account {
   code: string
@@ -76,6 +103,10 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
   const [vendors, setVendors]     = useState<Vendor[]>([])
   const [contracts, setContracts] = useState<ContractOption[]>([])
 
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
+  const [uploading, setUploading]         = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [submitting, setSubmitting]       = useState(false)
   const [error, setError]                 = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -135,6 +166,7 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
       setDescription(entry.description)
       setVendorId(entry.vendor_id ?? '')
       setEvidenceType(entry.evidence_type ?? '')
+      setAttachmentUrls(Array.isArray(entry.attachment_urls) ? entry.attachment_urls : [])
 
       const entryLines: JournalLine[] = (entry.lines ?? [])
         .sort((a: { line_order: number }, b: { line_order: number }) => a.line_order - b.line_order)
@@ -186,6 +218,37 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
   const isBalanced = totalDebit > 0 && diff < 0.01
   const hasAmount = totalDebit > 0 || totalCredit > 0
 
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    setUploading(true)
+    const newUrls: string[] = []
+    try {
+      for (const raw of files) {
+        const file = await resizeImage(raw, 800)
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? '업로드 실패')
+        newUrls.push(json.url)
+      }
+      setAttachmentUrls(prev => [...prev, ...newUrls])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '파일 업로드 실패')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function removeAttachment(url: string) {
+    try {
+      await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+    } catch { /* 무시 */ }
+    setAttachmentUrls(prev => prev.filter(u => u !== url))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -219,6 +282,7 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
           description: description.trim(),
           vendor_id: vendorId || null,
           evidence_type: evidenceType || null,
+          attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
           lines: filled.map(l => ({
             account_code:  l.account_code.trim(),
             debit_amount:  l.side === 'debit'  ? parseAmt(l.amount) : 0,
@@ -458,6 +522,82 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
           </CardContent>
         </Card>
 
+        {/* ── 증빙 첨부 ── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">증빙 첨부</CardTitle>
+              <div className="flex items-center gap-2">
+                {uploading && (
+                  <span className="flex items-center gap-1 text-xs text-blue-600">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />업로드 중...
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Paperclip className="w-4 h-4" />파일 추가
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.hwp"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {attachmentUrls.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 py-8 text-gray-400 cursor-pointer hover:border-blue-300 hover:text-blue-400 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="w-6 h-6" />
+                <p className="text-xs">이미지(가로 800px 자동조정) 또는 문서 첨부</p>
+                <p className="text-xs text-gray-300">JPG · PNG · PDF · HWP · DOC · XLS 등</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {attachmentUrls.map((url, i) => (
+                  <div key={i} className="relative group rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
+                    {isImageUrl(url) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={url} alt={`첨부 ${i + 1}`} className="w-full h-24 object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-24 gap-1 text-gray-400">
+                        <FileText className="w-8 h-8" />
+                        <span className="text-xs truncate px-2">{url.split('/').pop()?.split('_').pop()}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(url)}
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <div
+                  className="flex flex-col items-center justify-center gap-1 h-24 rounded-lg border-2 border-dashed border-gray-200 cursor-pointer hover:border-blue-300 hover:text-blue-400 text-gray-300 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-xs">추가</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {error && (
           <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -469,7 +609,7 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
           <Link href="/accounting/journal">
             <Button type="button" variant="outline">취소</Button>
           </Link>
-          <Button type="submit" disabled={submitting || !isBalanced}>
+          <Button type="submit" disabled={submitting || !isBalanced || uploading}>
             {submitting ? '수정 중...' : '전표 수정'}
           </Button>
         </div>
