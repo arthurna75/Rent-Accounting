@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { LandingOverlay } from '@/components/landing/LandingOverlay'
 import type { UserRole } from '@/types/database'
 
 interface DashboardShellProps {
@@ -25,6 +26,8 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      {/* 비로그인 시 마케팅 오버레이 */}
+      {isGuest && <LandingOverlay />}
       {/* 모바일 오버레이 (반투명 배경) */}
       {sidebarOpen && (
         <div
