@@ -115,13 +115,25 @@ export async function POST(req: NextRequest) {
     if (room.tenantName?.trim()) {
       // 임차인 있음: contract 생성 또는 업데이트
       const contractType = room.monthlyRent > 0 ? '월세' as const : '전세' as const
+
+      // chk_dates: end_date > start_date 제약 → 날짜 미입력 시 end = start + 2년 기본값
+      const startDate = room.leaseStart ?? conversionDate
+      const endDateRaw = room.leaseEnd ?? null
+      const endDate = (endDateRaw && endDateRaw > startDate)
+        ? endDateRaw
+        : (() => {
+            const d = new Date(startDate)
+            d.setFullYear(d.getFullYear() + 2)
+            return d.toISOString().split('T')[0]
+          })()
+
       const contractData = {
         organization_id:        orgId,
         property_id:            propId,
         lessee_name:            room.tenantName.trim(),
         contract_type:          contractType,
-        start_date:             room.leaseStart ?? conversionDate,
-        end_date:               room.leaseEnd ?? conversionDate,
+        start_date:             startDate,
+        end_date:               endDate,
         deposit_amount:         room.depositAmount,
         monthly_rent:           room.monthlyRent,
         monthly_management_fee: room.managementFee ?? null,
