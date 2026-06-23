@@ -23,6 +23,10 @@ const ContractSchema = z.object({
   auto_renewal:             z.boolean().default(false),
   auto_journal_rent:        z.boolean().default(false),
   auto_journal_mgmt:        z.boolean().default(false),
+  auto_journal_deposit:     z.boolean().default(false),
+  auto_journal_broker:      z.boolean().default(false),
+  broker_vendor_id:         z.string().uuid().optional().nullable(),
+  broker_fee:               z.number().min(0).optional().nullable(),
   special_terms:            z.string().optional(),
   notes:                    z.string().optional(),
   attachment_urls:          z.array(z.string().url()).optional().nullable(),
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { auto_journal_rent, auto_journal_mgmt, ...contractData } = parsed.data
+  const { auto_journal_rent, auto_journal_mgmt, auto_journal_deposit, auto_journal_broker, ...contractData } = parsed.data
 
   const { data, error } = await supabase
     .from('lease_contracts')
@@ -94,6 +98,8 @@ export async function POST(req: NextRequest) {
       ...contractData,
       auto_journal_rent,
       auto_journal_mgmt,
+      auto_journal_deposit,
+      auto_journal_broker,
       organization_id: profile.organization_id,
       status: 'active',
     })
@@ -150,6 +156,70 @@ export async function POST(req: NextRequest) {
       )
     } catch (e) {
       console.error('[auto-journal-mgmt]', (e as Error).message)
+    }
+  }
+
+  if (auto_journal_deposit && contractData.deposit_amount > 0) {
+    try {
+      await postJournalEntry(
+        supabase,
+        profile.organization_id,
+        {
+          entry_date:     entryDate,
+          entry_type:     '보증금수령',
+          description:    `${contractData.lessee_name} 보증금`,
+          reference_id:   data.id,
+          reference_type: 'lease_contracts',
+          lines: [
+            { account_code: '102', debit_amount: contractData.deposit_amount, credit_amount: 0, contract_id: data.id },
+            { account_code: '310', debit_amount: 0, credit_amount: contractData.deposit_amount, contract_id: data.id },
+          ],
+        },
+        user.id,
+        false,
+      )
+    } catch (e) {
+      console.error('[auto-journal-deposit]', (e as Error).message)
+    }
+  }
+
+  if (auto_journal_broker && contractData.broker_fee && contractData.broker_fee > 0) {
+    try {
+      const { data: brokerAccount } = await supabase
+        .from('chart_of_accounts')
+        .select('code')
+        .eq('organization_id', profile.organization_id)
+        .ilike('name', '%중개수수료%')
+        .limit(1)
+        .single()
+
+      if (brokerAccount) {
+        const brokerEntry = await postJournalEntry(
+          supabase,
+          profile.organization_id,
+          {
+            entry_date:     entryDate,
+            entry_type:     '비용지출',
+            description:    `${contractData.lessee_name} 중개수수료`,
+            reference_id:   data.id,
+            reference_type: 'lease_contracts',
+            lines: [
+              { account_code: brokerAccount.code, debit_amount: contractData.broker_fee, credit_amount: 0, contract_id: data.id },
+              { account_code: '102', debit_amount: 0, credit_amount: contractData.broker_fee, contract_id: data.id },
+            ],
+          },
+          user.id,
+          false,
+        )
+        if (contractData.broker_vendor_id) {
+          await supabase
+            .from('journal_entries')
+            .update({ vendor_id: contractData.broker_vendor_id })
+            .eq('id', brokerEntry.id)
+        }
+      }
+    } catch (e) {
+      console.error('[auto-journal-broker]', (e as Error).message)
     }
   }
 

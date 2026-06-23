@@ -35,6 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     'deposit_amount', 'monthly_rent', 'monthly_management_fee',
     'payment_due_day', 'vat_included',
     'notes', 'special_terms', 'auto_renewal', 'attachment_urls',
+    'broker_vendor_id', 'broker_fee', 'auto_journal_broker', 'auto_journal_deposit',
   ]
   const update = Object.fromEntries(
     Object.entries(body).filter(([k]) => allowedFields.includes(k))

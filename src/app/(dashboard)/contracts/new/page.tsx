@@ -46,6 +46,12 @@ interface ExistingContract {
 
 type ContractType = '월세' | '전세' | '반전세'
 
+interface Vendor {
+  id: string
+  name: string
+  business_number: string | null
+}
+
 interface FormState {
   property_id:              string
   contract_type:            ContractType
@@ -63,6 +69,10 @@ interface FormState {
   payment_due_day:          string
   auto_journal_rent:        boolean
   auto_journal_mgmt:        boolean
+  auto_journal_deposit:     boolean
+  auto_journal_broker:      boolean
+  broker_vendor_id:         string
+  broker_fee:               string
   start_date:               string
   end_date:                 string
   notes:                    string
@@ -85,6 +95,10 @@ const INITIAL: FormState = {
   payment_due_day:        '1',
   auto_journal_rent:      false,
   auto_journal_mgmt:      false,
+  auto_journal_deposit:   false,
+  auto_journal_broker:    false,
+  broker_vendor_id:       '',
+  broker_fee:             '',
   start_date:             '',
   end_date:               '',
   notes:                  '',
@@ -107,6 +121,7 @@ export default function NewContractPage() {
   const propertyIdParam = searchParams.get('propertyId') ?? ''
 
   const [properties,     setProperties]     = useState<Property[]>([])
+  const [vendors,        setVendors]        = useState<Vendor[]>([])
   const [selectedBuilding, setSelectedBuilding] = useState('')
   const [form,           setForm]           = useState<FormState>({ ...INITIAL, property_id: propertyIdParam })
   const [submitting,      setSubmitting]     = useState(false)
@@ -141,6 +156,11 @@ export default function NewContractPage() {
     fetch('/api/contracts/next-number')
       .then(r => r.json())
       .then(json => { if (json.number) set('contract_number', json.number) })
+      .catch(() => {})
+
+    fetch('/api/vendors?limit=200')
+      .then(r => r.json())
+      .then(json => setVendors(json.data ?? []))
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -258,6 +278,10 @@ export default function NewContractPage() {
           payment_due_day:        parseInt(form.payment_due_day) || 1,
           auto_journal_rent:      form.auto_journal_rent,
           auto_journal_mgmt:      form.auto_journal_mgmt,
+          auto_journal_deposit:   form.auto_journal_deposit,
+          auto_journal_broker:    form.auto_journal_broker,
+          broker_vendor_id:       form.broker_vendor_id || undefined,
+          broker_fee:             form.broker_fee ? (parseInt(digits(form.broker_fee), 10) || 0) : undefined,
           start_date:             form.start_date,
           end_date:               form.end_date,
           notes:                  form.notes || undefined,
@@ -440,6 +464,25 @@ export default function NewContractPage() {
                   className="w-full"
                 />
               </div>
+
+              <div className="col-span-2 space-y-1.5">
+                <Label>임대기간 <span className="text-red-500">*</span></Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={form.start_date}
+                    onChange={e => set('start_date', e.target.value)}
+                    className="flex-1"
+                  />
+                  <span className="text-gray-400 shrink-0">~</span>
+                  <Input
+                    type="date"
+                    value={form.end_date}
+                    onChange={e => set('end_date', e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -592,13 +635,26 @@ export default function NewContractPage() {
             </div>
 
             {/* 수입 자동반영 */}
-            {!isJeonse && (
-              <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 space-y-2">
-                <p className="text-xs font-semibold text-blue-700">수입 자동반영</p>
-                <p className="text-xs text-blue-500">
-                  체크 시 계약 등록과 동시에 분개장에 차변(보통예금)·대변(수익) 초안이 자동 기입됩니다.
-                </p>
-                <div className="flex flex-col gap-2 pt-0.5">
+            <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 space-y-2">
+              <p className="text-xs font-semibold text-blue-700">수입 자동반영</p>
+              <p className="text-xs text-blue-500">
+                체크 시 계약 등록과 동시에 분개장에 초안이 자동 기입됩니다.
+              </p>
+              <div className="flex flex-col gap-2 pt-0.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    checked={form.auto_journal_deposit}
+                    onChange={e => set('auto_journal_deposit', e.target.checked)}
+                    disabled={!form.deposit_amount}
+                  />
+                  <span className="text-sm text-gray-700">
+                    보증금 자동반영
+                    <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 임대보증금)</span>
+                  </span>
+                </label>
+                {!isJeonse && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -612,6 +668,8 @@ export default function NewContractPage() {
                       <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 임대수익)</span>
                     </span>
                   </label>
+                )}
+                {!isJeonse && (
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -625,35 +683,51 @@ export default function NewContractPage() {
                       <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 관리비수익)</span>
                     </span>
                   </label>
+                )}
+              </div>
+            </div>
+
+            {/* 중개업체 및 중개수수료 */}
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-3">
+              <p className="text-xs font-semibold text-gray-700">중개업체 및 중개수수료</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">중개업체 (거래처)</Label>
+                  <Select value={form.broker_vendor_id} onValueChange={v => set('broker_vendor_id', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="거래처 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.map(v => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">중개수수료 (원)</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.broker_fee)}
+                    onChange={e => set('broker_fee', digits(e.target.value))}
+                    placeholder="0"
+                  />
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── 계약 기간 ── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">계약 기간</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>계약 시작일 <span className="text-red-500">*</span></Label>
-                <Input
-                  type="date"
-                  value={form.start_date}
-                  onChange={e => set('start_date', e.target.value)}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  checked={form.auto_journal_broker}
+                  onChange={e => set('auto_journal_broker', e.target.checked)}
+                  disabled={!form.broker_fee}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>계약 종료일 <span className="text-red-500">*</span></Label>
-                <Input
-                  type="date"
-                  value={form.end_date}
-                  onChange={e => set('end_date', e.target.value)}
-                />
-              </div>
+                <span className="text-sm text-gray-700">
+                  중개수수료 자동반영
+                  <span className="text-xs text-gray-400 ml-1">(차변: 중개수수료 / 대변: 보통예금)</span>
+                </span>
+              </label>
             </div>
           </CardContent>
         </Card>

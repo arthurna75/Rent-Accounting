@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -16,6 +16,12 @@ import { AttachmentPanel } from '@/components/ui/AttachmentPanel'
 // ────────────────────────────────────────
 // 타입
 // ────────────────────────────────────────
+interface Vendor {
+  id: string
+  name: string
+  business_number: string | null
+}
+
 interface Property {
   id: string
   building_name: string
@@ -43,6 +49,10 @@ interface LeaseContract {
   notes: string | null
   special_terms: string | null
   attachment_urls: string[] | null
+  broker_vendor_id?: string | null
+  broker_fee?: number | null
+  auto_journal_broker?: boolean
+  auto_journal_deposit?: boolean
 }
 
 // ────────────────────────────────────────
@@ -86,6 +96,14 @@ export default function ContractEditForm({
   const [error, setError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>(contract.attachment_urls ?? [])
+  const [vendors, setVendors] = useState<Vendor[]>([])
+
+  useEffect(() => {
+    fetch('/api/vendors?limit=200')
+      .then(r => r.json())
+      .then(json => setVendors(json.data ?? []))
+      .catch(() => {})
+  }, [])
 
   const [idFront, idBack] = (contract.lessee_id_number ?? '').split('-')
 
@@ -107,6 +125,10 @@ export default function ContractEditForm({
     vat_included:           contract.vat_included,
     notes:                  contract.notes ?? '',
     special_terms:          contract.special_terms ?? '',
+    broker_vendor_id:       contract.broker_vendor_id ?? '',
+    broker_fee:             contract.broker_fee?.toString() ?? '',
+    auto_journal_broker:    contract.auto_journal_broker ?? false,
+    auto_journal_deposit:   contract.auto_journal_deposit ?? false,
   })
 
   const setStr = (key: string, value: string) =>
@@ -161,6 +183,10 @@ export default function ContractEditForm({
         notes:                  form.notes || null,
         special_terms:          form.special_terms || null,
         attachment_urls:        attachmentUrls.length > 0 ? attachmentUrls : null,
+        broker_vendor_id:       form.broker_vendor_id || null,
+        broker_fee:             form.broker_fee ? (parseInt(digits(form.broker_fee), 10) || 0) : null,
+        auto_journal_broker:    form.auto_journal_broker,
+        auto_journal_deposit:   form.auto_journal_deposit,
       }
 
       const res = await fetch(`/api/contracts/${contract.id}`, {
@@ -270,28 +296,26 @@ export default function ContractEditForm({
                 />
               </div>
 
-              {/* 계약 시작일 */}
-              <div className="space-y-1.5">
-                <Label htmlFor="start_date">계약 시작일</Label>
-                <Input
-                  id="start_date"
-                  type="date"
-                  value={form.start_date}
-                  onChange={e => setStr('start_date', e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* 계약 종료일 */}
-              <div className="space-y-1.5">
-                <Label htmlFor="end_date">계약 종료일 <span className="text-red-500">*</span></Label>
-                <Input
-                  id="end_date"
-                  type="date"
-                  value={form.end_date}
-                  onChange={e => setStr('end_date', e.target.value)}
-                  required
-                />
+              {/* 임대기간 — 한 행에 시작~종료 */}
+              <div className="col-span-2 space-y-1.5">
+                <Label>임대기간 <span className="text-red-500">*</span></Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={form.start_date}
+                    onChange={e => setStr('start_date', e.target.value)}
+                    className="flex-1"
+                    required
+                  />
+                  <span className="text-gray-400 shrink-0">~</span>
+                  <Input
+                    type="date"
+                    value={form.end_date}
+                    onChange={e => setStr('end_date', e.target.value)}
+                    className="flex-1"
+                    required
+                  />
+                </div>
               </div>
             </div>
           </CardContent>
@@ -436,6 +460,66 @@ export default function ContractEditForm({
                 />
                 <Label htmlFor="vat_included" className="cursor-pointer">부가세 포함</Label>
               </div>
+            </div>
+
+            {/* 보증금 자동반영 */}
+            <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 space-y-2">
+              <p className="text-xs font-semibold text-blue-700">보증금 자동반영</p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  checked={form.auto_journal_deposit}
+                  onChange={e => setBool('auto_journal_deposit', e.target.checked)}
+                />
+                <span className="text-sm text-gray-700">
+                  보증금 자동반영
+                  <span className="text-xs text-gray-400 ml-1">(차변: 보통예금 / 대변: 임대보증금)</span>
+                </span>
+              </label>
+            </div>
+
+            {/* 중개업체 및 중개수수료 */}
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 space-y-3">
+              <p className="text-xs font-semibold text-gray-700">중개업체 및 중개수수료</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">중개업체 (거래처)</Label>
+                  <Select value={form.broker_vendor_id} onValueChange={v => setStr('broker_vendor_id', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="거래처 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.map(v => (
+                        <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">중개수수료 (원)</Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={commaFmt(form.broker_fee)}
+                    onChange={e => setStr('broker_fee', digits(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  checked={form.auto_journal_broker}
+                  onChange={e => setBool('auto_journal_broker', e.target.checked)}
+                  disabled={!form.broker_fee}
+                />
+                <span className="text-sm text-gray-700">
+                  중개수수료 자동반영
+                  <span className="text-xs text-gray-400 ml-1">(차변: 중개수수료 / 대변: 보통예금)</span>
+                </span>
+              </label>
             </div>
           </CardContent>
         </Card>

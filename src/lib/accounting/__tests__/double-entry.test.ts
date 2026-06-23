@@ -33,6 +33,8 @@ const mockContract = (overrides = {}): LeaseContract => ({
   auto_renewal: false,
   auto_journal_rent: false,
   auto_journal_mgmt: false,
+  auto_journal_deposit: false,
+  auto_journal_broker: false,
   contract_date: null,
   status: 'active',
   termination_date: null,

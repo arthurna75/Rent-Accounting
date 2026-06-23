@@ -224,6 +224,10 @@ export interface LeaseContract {
   auto_renewal: boolean
   auto_journal_rent: boolean
   auto_journal_mgmt: boolean
+  auto_journal_deposit: boolean
+  auto_journal_broker: boolean
+  broker_vendor_id?: string | null
+  broker_fee?: number | null
   status: ContractStatus
   termination_date: string | null
   termination_reason: string | null
