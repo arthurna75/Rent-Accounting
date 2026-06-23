@@ -156,7 +156,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
             <Link href={`/contracts/${id}/renew`}>
               <Button variant="outline" size="sm" className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
                 <RefreshCw className="w-3.5 h-3.5" />
-                계약 갱신
+                계약 변경
               </Button>
             </Link>
           )}

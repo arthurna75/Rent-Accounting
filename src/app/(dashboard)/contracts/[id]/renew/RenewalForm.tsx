@@ -57,7 +57,7 @@ interface FormState {
   end_date: string
   notes: string
   auto_journal_deposit: boolean
-  terminate_old: boolean
+  auto_journal_deposit_refund: boolean
 }
 
 // ── 유틸 ──────────────────────────────────────
@@ -105,8 +105,8 @@ export default function RenewalForm({
     start_date:             '',
     end_date:               '',
     notes:                  '',
-    auto_journal_deposit:   false,
-    terminate_old:          true,
+    auto_journal_deposit:        false,
+    auto_journal_deposit_refund: true,
   })
 
   // 한국은행 기준금리 (기본값 2.50%)
@@ -226,9 +226,11 @@ export default function RenewalForm({
         throw new Error(json.error?.formErrors?.[0] ?? json.error ?? '등록 실패')
       }
 
-      if (form.terminate_old) {
-        await fetch(`/api/contracts/${originalContract.id}`, { method: 'DELETE' })
-      }
+      // 기존 계약 자동 해지 + 보증금 환불 분개
+      await fetch(
+        `/api/contracts/${originalContract.id}?deposit_refund=${form.auto_journal_deposit_refund}`,
+        { method: 'DELETE' }
+      )
 
       router.push('/contracts')
       router.refresh()
@@ -282,7 +284,7 @@ export default function RenewalForm({
         <Card className="border-blue-200">
           <CardHeader className="pb-3 bg-blue-50 rounded-t-lg border-b border-blue-100">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-blue-700">변경후 (갱신 계약)</CardTitle>
+              <CardTitle className="text-sm font-semibold text-blue-700">변경후 (계약 변경)</CardTitle>
               <Button
                 type="button"
                 size="sm"
@@ -487,20 +489,21 @@ export default function RenewalForm({
                   disabled={!nextDeposit}
                 />
                 <span className="text-xs text-gray-700">
-                  보증금 자동반영
+                  신규 보증금 분개 자동반영
                   <span className="text-gray-400 ml-1">(차: 보통예금 / 대: 임대보증금)</span>
                 </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-red-300 text-red-600"
-                  checked={form.terminate_old}
-                  onChange={e => set('terminate_old', e.target.checked)}
+                  className="w-4 h-4 rounded border-orange-300 text-orange-600"
+                  checked={form.auto_journal_deposit_refund}
+                  onChange={e => set('auto_journal_deposit_refund', e.target.checked)}
+                  disabled={!originalContract.deposit_amount}
                 />
                 <span className="text-xs text-gray-700">
-                  기존 계약 해지 처리
-                  <span className="text-gray-400 ml-1">(등록 완료 시 변경전 계약을 해지 처리)</span>
+                  기존 보증금 환불 분개 자동반영
+                  <span className="text-gray-400 ml-1">(차: 임대보증금 / 대: 보통예금 · 오늘 날짜)</span>
                 </span>
               </label>
             </div>
@@ -639,7 +642,7 @@ export default function RenewalForm({
           취소
         </Button>
         <Button type="submit" disabled={submitting}>
-          {submitting ? '등록 중...' : '계약 갱신 등록'}
+          {submitting ? '등록 중...' : '계약 변경 등록'}
         </Button>
       </div>
     </form>

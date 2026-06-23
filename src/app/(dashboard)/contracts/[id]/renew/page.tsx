@@ -53,7 +53,7 @@ export default async function RenewContractPage({
             계약 상세
           </Button>
         </Link>
-        <h2 className="text-xl font-semibold text-gray-900">계약 갱신</h2>
+        <h2 className="text-xl font-semibold text-gray-900">계약 변경</h2>
         <span className="text-sm text-gray-400">
           {(contract.property as { building_name: string; unit_number: string } | null)?.building_name}
           {(contract.property as { building_name: string; unit_number: string } | null)?.unit_number
