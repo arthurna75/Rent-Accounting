@@ -53,8 +53,11 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
   const [deletingId, setDeletingId]   = useState<string | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
 
-  async function handleDelete(id: string) {
-    if (!confirm('이 전표를 삭제하시겠습니까? 임시 상태의 전표만 삭제됩니다.')) return
+  async function handleDelete(id: string, status: EntryStatus) {
+    const msg = status === 'posted'
+      ? '승인완료 전표를 삭제합니다. 정말 삭제하시겠습니까?'
+      : '이 전표를 삭제하시겠습니까?'
+    if (!confirm(msg)) return
     setDeletingId(id)
     try {
       const res = await fetch(`/api/accounting/journal-entries/${id}`, { method: 'DELETE' })
@@ -150,16 +153,20 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
+                      {/* 확정 버튼 — draft 전용 */}
                       {entry.status === 'draft' && (
+                        <button
+                          onClick={() => handleApprove(entry.id)}
+                          disabled={approvingId === entry.id}
+                          className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                          title="확정 (손익통계·보고서에 반영)"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {/* 수정·삭제 — draft + posted (reversed 제외) */}
+                      {entry.status !== 'reversed' && (
                         <>
-                          <button
-                            onClick={() => handleApprove(entry.id)}
-                            disabled={approvingId === entry.id}
-                            className="p-1 rounded text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
-                            title="확정 (손익통계·보고서에 반영)"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </button>
                           <Link
                             href={`/accounting/journal/${entry.id}/edit`}
                             className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
@@ -168,7 +175,7 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
                             <Pencil className="w-3.5 h-3.5" />
                           </Link>
                           <button
-                            onClick={() => handleDelete(entry.id)}
+                            onClick={() => handleDelete(entry.id, entry.status)}
                             disabled={isDeleting}
                             className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                             title="삭제"
