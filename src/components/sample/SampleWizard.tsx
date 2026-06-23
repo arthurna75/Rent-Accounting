@@ -142,7 +142,7 @@ export function SampleWizard({ isGuest }: { isGuest: boolean }) {
         </CardContent>
       </Card>
 
-      {/* 개시분개 미리보기 */}
+      {/* 개시분개 (생성 결과) — T계정 2단 레이아웃 */}
       <Card>
         <CardHeader className="pb-3">
           <div>
@@ -150,46 +150,91 @@ export function SampleWizard({ isGuest }: { isGuest: boolean }) {
             <p className="text-xs text-gray-400 mt-0.5">기준일: {conversionDate} · 전표 확정(posted) 저장 완료</p>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 w-16">구분</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600">계정과목</th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 w-20">호실</th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-600 w-36">금액 (원)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {journalLines.map((line, i) => (
-                  <tr key={i} className={line.side === '차변' ? 'bg-blue-50/30' : 'bg-red-50/20'}>
-                    <td className="px-4 py-2">
-                      <span className={cn(
-                        'text-xs font-bold px-1.5 py-0.5 rounded',
-                        line.side === '차변' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600',
-                      )}>
-                        {line.side}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-gray-800">{line.account}</td>
-                    <td className="px-4 py-2 text-gray-500 text-xs">{line.unit ?? ''}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(line.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-gray-200 bg-gray-50">
-                <tr>
-                  <td className="px-4 py-2 text-xs font-bold text-gray-600" colSpan={3}>합계</td>
-                  <td className="px-4 py-2 text-right">
-                    <span className="text-sm font-bold tabular-nums text-green-700">
-                      차변 {fmt(totalDebit)} / 대변 {fmt(totalCredit)} ✓ 균형
+        <CardContent className="px-5 pb-5">
+          {(() => {
+            const debitLines  = journalLines.filter(l => l.side === '차변')
+            const creditLines = journalLines.filter(l => l.side === '대변')
+            const rowCount    = Math.max(debitLines.length, creditLines.length)
+            return (
+              <div className="rounded-lg border border-gray-200 overflow-hidden text-sm">
+
+                {/* 헤더 */}
+                <div className="grid grid-cols-2 divide-x divide-gray-200">
+                  <div className="px-4 py-2 bg-blue-50 font-bold text-blue-700">차변 (Debit)</div>
+                  <div className="px-4 py-2 bg-red-50  font-bold text-red-700">대변 (Credit)</div>
+                </div>
+
+                {/* 컬럼 서브헤더 */}
+                <div className="grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100 bg-gray-50/60">
+                  <div className="grid grid-cols-[1fr_9rem]">
+                    <span className="px-4 py-1.5 text-xs text-gray-500 font-medium">계정과목</span>
+                    <span className="px-4 py-1.5 text-xs text-gray-500 font-medium text-right">금액 (원)</span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_9rem]">
+                    <span className="px-4 py-1.5 text-xs text-gray-500 font-medium">계정과목</span>
+                    <span className="px-4 py-1.5 text-xs text-gray-500 font-medium text-right">금액 (원)</span>
+                  </div>
+                </div>
+
+                {/* 데이터 행 */}
+                {Array.from({ length: rowCount }).map((_, i) => {
+                  const d = debitLines[i]
+                  const c = creditLines[i]
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        'grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-50',
+                        i % 2 === 1 ? 'bg-gray-50/40' : '',
+                      )}
+                    >
+                      <div className="grid grid-cols-[1fr_9rem] items-center py-2">
+                        {d ? (
+                          <>
+                            <span className="px-4 text-gray-800 truncate">
+                              {d.account}
+                              {d.unit && <span className="ml-1.5 text-xs text-gray-400">({d.unit})</span>}
+                            </span>
+                            <span className="px-4 tabular-nums font-medium text-right text-blue-800">
+                              {fmt(d.amount)}
+                            </span>
+                          </>
+                        ) : <span className="col-span-2" />}
+                      </div>
+                      <div className="grid grid-cols-[1fr_9rem] items-center py-2">
+                        {c ? (
+                          <>
+                            <span className="px-4 text-gray-800 truncate">
+                              {c.account}
+                              {c.unit && <span className="ml-1.5 text-xs text-gray-400">({c.unit})</span>}
+                            </span>
+                            <span className="px-4 tabular-nums font-medium text-right text-red-800">
+                              {fmt(c.amount)}
+                            </span>
+                          </>
+                        ) : <span className="col-span-2" />}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* 합계 행 */}
+                <div className="grid grid-cols-2 divide-x divide-gray-200 border-t-2 border-gray-300 bg-gray-50">
+                  <div className="grid grid-cols-[1fr_9rem] items-center py-2.5">
+                    <span className="px-4 text-xs font-bold text-gray-600">합 계</span>
+                    <span className="px-4 tabular-nums font-bold text-right text-blue-700">{fmt(totalDebit)}</span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_9rem] items-center py-2.5">
+                    <span className="px-4 text-xs font-bold text-gray-600">
+                      합 계 <span className="text-green-600 font-semibold ml-1">✓ 균형</span>
                     </span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                    <span className="px-4 tabular-nums font-bold text-right text-blue-700">{fmt(totalCredit)}</span>
+                  </div>
+                </div>
+
+              </div>
+            )
+          })()}
         </CardContent>
       </Card>
     </div>
