@@ -129,7 +129,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
   const contractEntries = entryIds.length > 0
     ? ((await supabase
         .from('journal_entries')
-        .select('id, entry_date, entry_type, status, description, entry_number')
+        .select('id, entry_date, entry_type, status, description, entry_number, lines:journal_entry_lines(debit_amount, credit_amount)')
         .in('id', entryIds)
         .order('entry_date', { ascending: false })
       ).data ?? [])

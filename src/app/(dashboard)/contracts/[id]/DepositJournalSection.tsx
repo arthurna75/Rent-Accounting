@@ -22,6 +22,7 @@ interface ContractEntry {
   status: string
   description: string
   entry_number: string
+  lines?: { debit_amount: number; credit_amount: number }[]
 }
 
 interface DepositTx {
@@ -130,7 +131,7 @@ export default function DepositJournalSection({
                 계약 보증금 {formatKRW(depositAmount)} —
               </span>
               {fallbackMatched ? (
-                <AccountingBadge entry={fallbackMatched} />
+                <AccountingInfo entry={fallbackMatched} />
               ) : (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">미처리</Badge>
@@ -200,7 +201,7 @@ export default function DepositJournalSection({
                       <TableCell className="text-sm text-gray-500">{d.notes ?? '—'}</TableCell>
                       <TableCell className="text-center">
                         {matched ? (
-                          <AccountingBadge entry={matched} />
+                          <AccountingInfo entry={matched} />
                         ) : (
                           <div className="flex items-center justify-center gap-2">
                             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">미처리</Badge>
@@ -241,17 +242,25 @@ export default function DepositJournalSection({
   )
 }
 
-function AccountingBadge({ entry }: { entry: ContractEntry }) {
+function AccountingInfo({ entry }: { entry: ContractEntry }) {
   const isDraft = entry.status === 'draft'
+  const total = (entry.lines ?? []).reduce((s, l) => s + l.debit_amount, 0)
   return (
-    <Badge
-      variant="outline"
-      className={isDraft
-        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-        : 'bg-green-50 text-green-700 border-green-200'}
-    >
-      {isDraft ? '임시' : '확정'}
-    </Badge>
+    <div className="text-xs space-y-0.5 text-left">
+      <div className="flex items-center gap-1.5">
+        <Badge
+          variant="outline"
+          className={isDraft
+            ? 'bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] py-0'
+            : 'bg-green-50 text-green-700 border-green-200 text-[10px] py-0'}
+        >
+          {isDraft ? '임시' : '확정'}
+        </Badge>
+        <span className="text-gray-400">{entry.entry_date}</span>
+      </div>
+      <div className="text-gray-600 truncate max-w-[160px]">{entry.description}</div>
+      {total > 0 && <div className="font-medium text-gray-800">{formatKRW(total)}</div>}
+    </div>
   )
 }
 

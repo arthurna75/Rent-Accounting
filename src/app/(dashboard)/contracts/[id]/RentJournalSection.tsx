@@ -22,6 +22,7 @@ interface ContractEntry {
   status: string
   description: string
   entry_number: string
+  lines?: { debit_amount: number; credit_amount: number }[]
 }
 
 interface RentTransaction {
@@ -72,17 +73,29 @@ function findRentEntries(rent: RentTransaction, entries: ContractEntry[]) {
   )
 }
 
-function AccountingBadge({ entry }: { entry: ContractEntry }) {
+function entryTotal(entry: ContractEntry) {
+  return (entry.lines ?? []).reduce((s, l) => s + l.debit_amount, 0)
+}
+
+function AccountingInfo({ entry }: { entry: ContractEntry }) {
   const isDraft = entry.status === 'draft'
+  const total = entryTotal(entry)
   return (
-    <Badge
-      variant="outline"
-      className={isDraft
-        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-        : 'bg-green-50 text-green-700 border-green-200'}
-    >
-      {isDraft ? '임시' : '확정'}
-    </Badge>
+    <div className="text-xs space-y-0.5 text-left">
+      <div className="flex items-center gap-1.5">
+        <Badge
+          variant="outline"
+          className={isDraft
+            ? 'bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] py-0'
+            : 'bg-green-50 text-green-700 border-green-200 text-[10px] py-0'}
+        >
+          {isDraft ? '임시' : '확정'}
+        </Badge>
+        <span className="text-gray-400">{entry.entry_date}</span>
+      </div>
+      <div className="text-gray-600 truncate max-w-[160px]">{entry.description}</div>
+      {total > 0 && <div className="font-medium text-gray-800">{formatKRW(total)}</div>}
+    </div>
   )
 }
 
@@ -194,15 +207,7 @@ export default function RentJournalSection({
       </CardHeader>
       <CardContent className="p-0">
         {rents.length === 0 ? (
-          <div className="py-8 flex flex-col items-center gap-3">
-            <p className="text-sm text-gray-400">임대료 청구 내역이 없습니다.</p>
-            {!isJeonse && (
-              <Button size="sm" variant="outline" onClick={handleBulk} disabled={bulkLoading}>
-                {bulkLoading ? '생성 중...' : '전체 기간 임대료 생성'}
-              </Button>
-            )}
-            {bulkMsg && <p className="text-xs text-gray-500">{bulkMsg}</p>}
-          </div>
+          <p className="py-8 text-center text-sm text-gray-400">임대료 청구 내역이 없습니다.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -233,8 +238,8 @@ export default function RentJournalSection({
                       <TableCell className="text-center">{rentStatusLabel(r.status)}</TableCell>
                       <TableCell className="text-center">
                         {matched.length > 0 ? (
-                          <div className="flex items-center justify-center gap-1 flex-wrap">
-                            {matched.map(e => <AccountingBadge key={e.id} entry={e} />)}
+                          <div className="space-y-1.5">
+                            {matched.map(e => <AccountingInfo key={e.id} entry={e} />)}
                           </div>
                         ) : (
                           <div className="flex items-center justify-center gap-2">

@@ -36,7 +36,7 @@ export async function POST(
   // 계약 조회
   const { data: contract, error: contractError } = await supabase
     .from('lease_contracts')
-    .select('id, organization_id, lessee_name, start_date, end_date, monthly_rent, monthly_management_fee, deposit_amount')
+    .select('id, organization_id, lessee_name, start_date, end_date, monthly_rent, monthly_management_fee, deposit_amount, property_id')
     .eq('id', contractId)
     .single()
 
@@ -101,8 +101,8 @@ export async function POST(
               reference_id:   contractId,
               reference_type: 'lease_contracts',
               lines: [
-                { account_code: '102', debit_amount: contract.monthly_rent, credit_amount: 0, contract_id: contractId },
-                { account_code: '510', debit_amount: 0, credit_amount: contract.monthly_rent, contract_id: contractId },
+                { account_code: '102', debit_amount: contract.monthly_rent, credit_amount: 0, contract_id: contractId, property_id: (contract as any).property_id ?? undefined },
+                { account_code: '510', debit_amount: 0, credit_amount: contract.monthly_rent, contract_id: contractId, property_id: (contract as any).property_id ?? undefined },
               ],
             },
             user.id,
@@ -148,8 +148,8 @@ export async function POST(
         reference_id:   contractId,
         reference_type: 'lease_contracts',
         lines: [
-          { account_code: mapping.debit,  debit_amount: amount,  credit_amount: 0,      contract_id: contractId },
-          { account_code: mapping.credit, debit_amount: 0,       credit_amount: amount, contract_id: contractId },
+          { account_code: mapping.debit,  debit_amount: amount,  credit_amount: 0,      contract_id: contractId, property_id: (contract as any).property_id ?? undefined },
+          { account_code: mapping.credit, debit_amount: 0,       credit_amount: amount, contract_id: contractId, property_id: (contract as any).property_id ?? undefined },
         ],
       },
       user.id,
