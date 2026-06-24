@@ -36,7 +36,7 @@ export async function POST(
   // 계약 조회
   const { data: contract, error: contractError } = await supabase
     .from('lease_contracts')
-    .select('id, organization_id, lessee_name, start_date, end_date, monthly_rent, monthly_management_fee, deposit_amount, property_id')
+    .select('id, organization_id, lessee_name, start_date, end_date, monthly_rent, monthly_management_fee, deposit_amount, property_id, payment_condition')
     .eq('id', contractId)
     .single()
 
@@ -79,7 +79,10 @@ export async function POST(
     let created = 0
     const errors: string[] = []
 
-    const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+    // 후불: 첫 납부월 = 계약시작월 + 1 / 선불: 계약시작월
+    const isPostpaid = (contract as any).payment_condition === '후불'
+    const firstMonth = isPostpaid ? startDate.getMonth() + 1 : startDate.getMonth()
+    const cur = new Date(startDate.getFullYear(), firstMonth, 1)
     const limit = new Date(limitDate.getFullYear(), limitDate.getMonth(), 1)
 
     {

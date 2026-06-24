@@ -85,6 +85,7 @@ interface FormState {
   monthly_management_fee:   string
   vat_included:             boolean
   payment_due_day:          string
+  payment_condition:        '선불' | '후불'
   auto_journal_rent:        boolean
   auto_journal_mgmt:        boolean
   auto_journal_deposit:     boolean
@@ -111,6 +112,7 @@ const INITIAL: FormState = {
   monthly_management_fee: '',
   vat_included:           true,
   payment_due_day:        '1',
+  payment_condition:      '선불',
   auto_journal_rent:      false,
   auto_journal_mgmt:      false,
   auto_journal_deposit:   false,
@@ -373,6 +375,7 @@ export default function NewContractPage() {
                                     : undefined,
           vat_included:           form.vat_included,
           payment_due_day:        parseInt(form.payment_due_day) || 1,
+          payment_condition:      form.payment_condition,
           auto_journal_rent:      form.auto_journal_rent,
           auto_journal_mgmt:      form.auto_journal_mgmt,
           auto_journal_deposit:   form.auto_journal_deposit,
@@ -764,6 +767,18 @@ export default function NewContractPage() {
                             {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
                               <SelectItem key={d} value={String(d)}>{d}일</SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {!isJeonse && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">지급조건</Label>
+                        <Select value={form.payment_condition} onValueChange={v => set('payment_condition', v as '선불' | '후불')}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="선불">선불 (당월 납부)</SelectItem>
+                            <SelectItem value="후불">후불 (익월 납부)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

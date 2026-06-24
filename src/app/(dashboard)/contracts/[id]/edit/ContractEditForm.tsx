@@ -44,6 +44,7 @@ interface LeaseContract {
   monthly_management_fee: number | null
   vat_included: boolean
   payment_due_day: number
+  payment_condition?: string
   start_date: string
   end_date: string
   notes: string | null
@@ -122,6 +123,7 @@ export default function ContractEditForm({
     monthly_rent:           contract.monthly_rent.toString(),
     monthly_management_fee: contract.monthly_management_fee?.toString() ?? '',
     payment_due_day:        contract.payment_due_day.toString(),
+    payment_condition:      (contract.payment_condition ?? '선불') as '선불' | '후불',
     vat_included:           contract.vat_included,
     notes:                  contract.notes ?? '',
     special_terms:          contract.special_terms ?? '',
@@ -179,6 +181,7 @@ export default function ContractEditForm({
                                   ? null
                                   : (parseInt(digits(form.monthly_management_fee), 10) || 0),
         payment_due_day:        parseInt(form.payment_due_day) || 1,
+        payment_condition:      form.payment_condition,
         vat_included:           form.vat_included,
         notes:                  form.notes || null,
         special_terms:          form.special_terms || null,
@@ -444,6 +447,20 @@ export default function ContractEditForm({
                       {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
                         <SelectItem key={d} value={String(d)}>{d}일</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* 지급조건 */}
+              {!isJeonse && (
+                <div className="space-y-1.5">
+                  <Label>지급조건</Label>
+                  <Select value={form.payment_condition} onValueChange={v => setStr('payment_condition', v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="선불">선불 (당월 납부)</SelectItem>
+                      <SelectItem value="후불">후불 (익월 납부)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

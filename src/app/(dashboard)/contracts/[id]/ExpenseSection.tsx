@@ -89,6 +89,13 @@ export default function ExpenseSection({ contractId, entries }: Props) {
                   </TableRow>
                 )
               })}
+              <TableRow className="bg-gray-50 font-semibold">
+                <TableCell colSpan={3} className="text-sm text-gray-600">합계</TableCell>
+                <TableCell className="text-right text-sm text-gray-900">
+                  {formatKRW(entries.reduce((s, e) => s + (e.lines ?? []).reduce((ls, l) => ls + l.debit_amount, 0), 0))}
+                </TableCell>
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         )}

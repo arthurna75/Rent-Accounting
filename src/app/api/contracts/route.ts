@@ -20,6 +20,7 @@ const ContractSchema = z.object({
   monthly_management_fee:   z.number().min(0).optional(),
   vat_included:             z.boolean().default(true),
   payment_due_day:          z.number().int().min(1).max(31).default(1),
+  payment_condition:        z.enum(['선불', '후불']).default('선불'),
   auto_renewal:             z.boolean().default(false),
   auto_journal_rent:        z.boolean().default(false),
   auto_journal_mgmt:        z.boolean().default(false),

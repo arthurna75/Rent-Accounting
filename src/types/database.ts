@@ -221,6 +221,7 @@ export interface LeaseContract {
   monthly_management_fee: number | null
   vat_included: boolean
   payment_due_day: number
+  payment_condition: '선불' | '후불'
   auto_renewal: boolean
   auto_journal_rent: boolean
   auto_journal_mgmt: boolean

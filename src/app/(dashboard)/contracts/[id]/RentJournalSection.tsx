@@ -44,6 +44,7 @@ interface Props {
   startDate: string
   endDate: string
   contractType: string
+  paymentCondition: '선불' | '후불'
   rents: RentTransaction[]
   entries: ContractEntry[]
 }
@@ -117,7 +118,7 @@ function rentStatusLabel(status: string) {
 
 export default function RentJournalSection({
   contractId, monthlyRent, managementFee, lesseeName,
-  startDate, contractType, rents, entries,
+  startDate, contractType, paymentCondition, rents, entries,
 }: Props) {
   const router = useRouter()
   const [form, setForm] = useState<InlineForm | null>(null)
@@ -194,7 +195,17 @@ export default function RentJournalSection({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">임대료 청구 내역</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">임대료 청구 내역</CardTitle>
+            {!isJeonse && (
+              <Badge variant="outline" className={paymentCondition === '후불'
+                ? 'text-orange-700 border-orange-200 bg-orange-50 text-[10px] py-0'
+                : 'text-blue-700 border-blue-200 bg-blue-50 text-[10px] py-0'}
+              >
+                {paymentCondition}
+              </Badge>
+            )}
+          </div>
           {!isJeonse && (
             <div className="flex items-center gap-2">
               {bulkMsg && <span className="text-xs text-gray-500">{bulkMsg}</span>}
@@ -252,6 +263,13 @@ export default function RentJournalSection({
                   </TableRow>
                 )
               })}
+              <TableRow className="bg-gray-50 font-semibold">
+                <TableCell colSpan={3} className="text-sm text-gray-600">합계</TableCell>
+                <TableCell className="text-right text-sm text-gray-900">
+                  {formatKRW(entries.reduce((s, e) => s + entryTotal(e), 0))}
+                </TableCell>
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         ) : (
@@ -320,6 +338,16 @@ export default function RentJournalSection({
                   </>
                 )
               })}
+              <TableRow className="bg-gray-50 font-semibold">
+                <TableCell colSpan={3} className="text-sm text-gray-600">합계</TableCell>
+                <TableCell className="text-right text-sm text-gray-900">
+                  {formatKRW(rents.reduce((s, r) => s + r.paid_amount, 0))}
+                </TableCell>
+                <TableCell />
+                <TableCell className="text-right text-sm text-gray-900 pr-4">
+                  전표 {formatKRW(entries.reduce((s, e) => s + entryTotal(e), 0))}
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         )}

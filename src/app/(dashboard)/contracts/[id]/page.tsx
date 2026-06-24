@@ -55,6 +55,7 @@ interface LeaseContract {
   monthly_rent: number
   monthly_management_fee: number | null
   vat_included: boolean
+  payment_condition: '선불' | '후불'
   start_date: string
   end_date: string
   status: ContractStatus
@@ -96,7 +97,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
   const [contractResult, depositsResult, rentsResult] = await Promise.all([
     supabase
       .from('lease_contracts')
-      .select('*, monthly_management_fee, property:properties!property_id(building_name, unit_number, address_road, property_type)')
+      .select('*, monthly_management_fee, payment_condition, property:properties!property_id(building_name, unit_number, address_road, property_type)')
       .eq('id', id)
       .single(),
     supabase
@@ -202,6 +203,9 @@ export default async function ContractDetailPage({ params }: PageProps) {
               <InfoRow label="월세">{formatKRW(contract.monthly_rent)}</InfoRow>
             )}
             <InfoRow label="부가세 포함">{contract.vat_included ? '포함' : '미포함'}</InfoRow>
+            {contract.contract_type !== '전세' && (
+              <InfoRow label="지급조건">{contract.payment_condition ?? '선불'}</InfoRow>
+            )}
           </CardContent>
         </Card>
 
@@ -251,6 +255,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
         startDate={contract.start_date}
         endDate={contract.end_date}
         contractType={contract.contract_type}
+        paymentCondition={contract.payment_condition ?? '선불'}
         rents={rents}
         entries={rentEntries}
       />

@@ -31,6 +31,7 @@ interface OriginalContract {
   monthly_management_fee: number | null
   vat_included: boolean
   payment_due_day: number
+  payment_condition?: string
   start_date: string
   end_date: string
   notes: string | null
@@ -52,6 +53,7 @@ interface FormState {
   monthly_rent: string
   monthly_management_fee: string
   payment_due_day: string
+  payment_condition: '선불' | '후불'
   vat_included: boolean
   start_date: string
   end_date: string
@@ -101,6 +103,7 @@ export default function RenewalForm({
     monthly_rent:           '',
     monthly_management_fee: '',
     payment_due_day:        String(originalContract.payment_due_day),
+    payment_condition:      (originalContract.payment_condition ?? '선불') as '선불' | '후불',
     vat_included:           originalContract.vat_included,
     start_date:             '',
     end_date:               '',
@@ -132,6 +135,7 @@ export default function RenewalForm({
                                 ? String(originalContract.monthly_management_fee)
                                 : '',
       payment_due_day:        String(originalContract.payment_due_day),
+      payment_condition:      (originalContract.payment_condition ?? '선불') as '선불' | '후불',
       vat_included:           originalContract.vat_included,
       notes:                  originalContract.notes ?? '',
     }))
@@ -210,6 +214,7 @@ export default function RenewalForm({
                                     ? (parseInt(digits(form.monthly_management_fee), 10) || 0)
                                     : undefined,
           payment_due_day:        parseInt(form.payment_due_day) || 1,
+          payment_condition:      form.payment_condition,
           vat_included:           form.vat_included,
           start_date:             form.start_date,
           end_date:               form.end_date,
@@ -436,6 +441,18 @@ export default function RenewalForm({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">지급조건</Label>
+                <Select value={form.payment_condition} onValueChange={v => set('payment_condition', v as '선불' | '후불')}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="선불">선불 (당월)</SelectItem>
+                    <SelectItem value="후불">후불 (익월)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="flex items-end pb-1">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
