@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -81,7 +82,11 @@ function AccountingInfo({ entry }: { entry: ContractEntry }) {
   const isDraft = entry.status === 'draft'
   const total = entryTotal(entry)
   return (
-    <div className="text-xs space-y-0.5 text-left">
+    <Link
+      href={`/accounting/journal/${entry.id}/edit`}
+      className="block text-xs space-y-0.5 text-left rounded hover:bg-gray-100 transition-colors p-0.5 -m-0.5"
+      onClick={e => e.stopPropagation()}
+    >
       <div className="flex items-center gap-1.5">
         <Badge
           variant="outline"
@@ -95,7 +100,7 @@ function AccountingInfo({ entry }: { entry: ContractEntry }) {
       </div>
       <div className="text-gray-600 truncate max-w-[160px]">{entry.description}</div>
       {total > 0 && <div className="font-medium text-gray-800">{formatKRW(total)}</div>}
-    </div>
+    </Link>
   )
 }
 
@@ -225,7 +230,11 @@ export default function RentJournalSection({
                 const total = entryTotal(e)
                 const isDraft = e.status === 'draft'
                 return (
-                  <TableRow key={e.id}>
+                  <TableRow
+                    key={e.id}
+                    className="cursor-pointer hover:bg-blue-50/40"
+                    onClick={() => router.push(`/accounting/journal/${e.id}/edit`)}
+                  >
                     <TableCell className="text-sm text-gray-600">{e.entry_date}</TableCell>
                     <TableCell className="text-sm text-gray-500">{e.entry_number}</TableCell>
                     <TableCell className="text-sm text-gray-700">{e.description}</TableCell>

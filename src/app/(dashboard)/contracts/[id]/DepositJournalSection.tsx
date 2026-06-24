@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +67,9 @@ function commaFmt(v: string) {
   return n ? Number(n).toLocaleString('ko-KR') : ''
 }
 function parseAmt(v: string) { return parseInt(v.replace(/\D/g, ''), 10) || 0 }
+function entryTotal(e: ContractEntry) {
+  return (e.lines ?? []).reduce((s, l) => s + l.debit_amount, 0)
+}
 
 export default function DepositJournalSection({
   contractId, depositAmount, lesseeName, deposits, entries,
@@ -113,10 +117,8 @@ export default function DepositJournalSection({
     }
   }
 
-  // deposits가 비어있고 depositAmount > 0인 경우 처리
-  const showFallback = deposits.length === 0 && depositAmount > 0
+  const showFallback = deposits.length === 0 && entries.length === 0 && depositAmount > 0
   const fallbackKey = 'fallback'
-  const fallbackMatched = entries.find(e => e.entry_type === '보증금수령') ?? null
 
   return (
     <Card>
@@ -124,32 +126,70 @@ export default function DepositJournalSection({
         <CardTitle className="text-base">보증금 거래 내역</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {showFallback ? (
+        {/* 전표만 있는 경우 (deposit_transactions 없음) */}
+        {deposits.length === 0 && entries.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead>날짜</TableHead>
+                <TableHead>전표번호</TableHead>
+                <TableHead>적요</TableHead>
+                <TableHead className="text-right">금액</TableHead>
+                <TableHead className="text-center">상태</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map(e => {
+                const total = entryTotal(e)
+                const isDraft = e.status === 'draft'
+                return (
+                  <TableRow
+                    key={e.id}
+                    className="cursor-pointer hover:bg-blue-50/40"
+                    onClick={() => router.push(`/accounting/journal/${e.id}/edit`)}
+                  >
+                    <TableCell className="text-sm text-gray-600">{e.entry_date}</TableCell>
+                    <TableCell className="text-sm text-gray-500">{e.entry_number}</TableCell>
+                    <TableCell className="text-sm text-gray-700">{e.description}</TableCell>
+                    <TableCell className="text-right font-medium text-gray-800">{total > 0 ? formatKRW(total) : '—'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge
+                        variant="outline"
+                        className={isDraft
+                          ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          : 'bg-green-50 text-green-700 border-green-200'}
+                      >
+                        {isDraft ? '임시' : '확정'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        ) : showFallback ? (
+          /* 거래내역 없고 전표도 없지만 계약 보증금이 있는 경우 */
           <div className="px-4 py-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-700">
                 계약 보증금 {formatKRW(depositAmount)} —
               </span>
-              {fallbackMatched ? (
-                <AccountingInfo entry={fallbackMatched} />
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">미처리</Badge>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={() => openForm(
-                      fallbackKey,
-                      new Date().toISOString().slice(0, 10),
-                      depositAmount,
-                      '보증금수령',
-                    )}
-                  >
-                    전표 생성
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">미처리</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => openForm(
+                    fallbackKey,
+                    new Date().toISOString().slice(0, 10),
+                    depositAmount,
+                    '보증금수령',
+                  )}
+                >
+                  전표 생성
+                </Button>
+              </div>
             </div>
             {form?.rowKey === fallbackKey && (
               <InlineFormPanel
@@ -165,6 +205,7 @@ export default function DepositJournalSection({
         ) : deposits.length === 0 ? (
           <p className="py-8 text-center text-sm text-gray-400">보증금 거래 내역이 없습니다.</p>
         ) : (
+          /* 거래내역 있는 경우 */
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
@@ -244,9 +285,13 @@ export default function DepositJournalSection({
 
 function AccountingInfo({ entry }: { entry: ContractEntry }) {
   const isDraft = entry.status === 'draft'
-  const total = (entry.lines ?? []).reduce((s, l) => s + l.debit_amount, 0)
+  const total = entryTotal(entry)
   return (
-    <div className="text-xs space-y-0.5 text-left">
+    <Link
+      href={`/accounting/journal/${entry.id}/edit`}
+      className="block text-xs space-y-0.5 text-left rounded hover:bg-gray-100 transition-colors p-0.5 -m-0.5"
+      onClick={e => e.stopPropagation()}
+    >
       <div className="flex items-center gap-1.5">
         <Badge
           variant="outline"
@@ -260,7 +305,7 @@ function AccountingInfo({ entry }: { entry: ContractEntry }) {
       </div>
       <div className="text-gray-600 truncate max-w-[160px]">{entry.description}</div>
       {total > 0 && <div className="font-medium text-gray-800">{formatKRW(total)}</div>}
-    </div>
+    </Link>
   )
 }
 
