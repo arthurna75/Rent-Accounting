@@ -4,12 +4,12 @@ import { formatKRW, formatDate } from '@/lib/utils/format'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import Link from 'next/link'
 import { ArrowLeft, Pencil, RefreshCw } from 'lucide-react'
 import ContractTerminateButton from './TerminateButton'
+import DepositJournalSection from './DepositJournalSection'
+import RentJournalSection from './RentJournalSection'
+import ExpenseSection from './ExpenseSection'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -18,7 +18,6 @@ interface PageProps {
 type ContractStatus = 'active' | 'expired' | 'terminated'
 type ContractType = '월세' | '전세' | '반전세'
 type DepositTxType = '수령' | '반환' | '증액' | '감액'
-type RentStatus = 'unpaid' | 'partial' | 'paid' | 'overdue'
 
 interface DepositTransaction {
   id: string
@@ -35,7 +34,7 @@ interface RentTransaction {
   amount: number
   vat_amount: number
   paid_amount: number
-  status: RentStatus
+  status: string
 }
 
 interface Property {
@@ -54,6 +53,7 @@ interface LeaseContract {
   contract_type: ContractType
   deposit_amount: number
   monthly_rent: number
+  monthly_management_fee: number | null
   vat_included: boolean
   start_date: string
   end_date: string
@@ -72,16 +72,6 @@ function statusBadge(status: ContractStatus) {
   return <Badge variant="outline" className={s.className}>{s.label}</Badge>
 }
 
-function rentStatusBadge(status: RentStatus) {
-  const map: Record<RentStatus, { label: string; className: string }> = {
-    unpaid:  { label: '미납', className: 'bg-red-100 text-red-700 border-red-200' },
-    partial: { label: '부분납', className: 'bg-orange-100 text-orange-700 border-orange-200' },
-    paid:    { label: '납부', className: 'bg-green-100 text-green-700 border-green-200' },
-    overdue: { label: '연체', className: 'bg-red-200 text-red-800 border-red-300' },
-  }
-  const s = map[status] ?? { label: status, className: 'bg-gray-100 text-gray-600 border-gray-200' }
-  return <Badge variant="outline" className={s.className}>{s.label}</Badge>
-}
 
 function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -106,7 +96,7 @@ export default async function ContractDetailPage({ params }: PageProps) {
   const [contractResult, depositsResult, rentsResult] = await Promise.all([
     supabase
       .from('lease_contracts')
-      .select('*, property:properties!property_id(building_name, unit_number, address_road, property_type)')
+      .select('*, monthly_management_fee, property:properties!property_id(building_name, unit_number, address_road, property_type)')
       .eq('id', id)
       .single(),
     supabase
@@ -127,6 +117,27 @@ export default async function ContractDetailPage({ params }: PageProps) {
   const contract = contractResult.data as unknown as LeaseContract
   const deposits = (depositsResult.data ?? []) as unknown as DepositTransaction[]
   const rents = (rentsResult.data ?? []) as unknown as RentTransaction[]
+
+  // journal entries 조회
+  const { data: linkedLines } = await supabase
+    .from('journal_entry_lines')
+    .select('journal_entry_id')
+    .eq('contract_id', id)
+
+  const entryIds = [...new Set((linkedLines ?? []).map(r => r.journal_entry_id as string))]
+
+  const contractEntries = entryIds.length > 0
+    ? ((await supabase
+        .from('journal_entries')
+        .select('id, entry_date, entry_type, status, description, entry_number')
+        .in('id', entryIds)
+        .order('entry_date', { ascending: false })
+      ).data ?? [])
+    : []
+
+  const depositEntries = contractEntries.filter(e => ['보증금수령', '보증금반환'].includes(e.entry_type))
+  const rentEntries = contractEntries.filter(e => ['임대수익', '관리비'].includes(e.entry_type))
+  const expenseEntries = contractEntries.filter(e => e.entry_type === '비용지출')
 
   const days = daysUntil(contract.end_date)
   const dDayLabel = days >= 0 ? `D-${days}` : `D+${Math.abs(days)}`
@@ -223,93 +234,33 @@ export default async function ContractDetailPage({ params }: PageProps) {
       </div>
 
       {/* 보증금 거래 내역 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">보증금 거래 내역</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {deposits.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">보증금 거래 내역이 없습니다.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead>날짜</TableHead>
-                  <TableHead>구분</TableHead>
-                  <TableHead className="text-right">금액</TableHead>
-                  <TableHead>비고</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {deposits.map(d => (
-                  <TableRow key={d.id}>
-                    <TableCell className="text-sm text-gray-600">
-                      {formatDate(d.transaction_date)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          ['수령', '증액'].includes(d.transaction_type)
-                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-orange-50 text-orange-700 border-orange-200'
-                        }
-                      >
-                        {d.transaction_type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-gray-800">
-                      {formatKRW(d.amount)}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">{d.notes ?? '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <DepositJournalSection
+        contractId={id}
+        depositAmount={contract.deposit_amount}
+        lesseeName={contract.lessee_name}
+        deposits={deposits}
+        entries={depositEntries}
+      />
 
       {/* 임대료 청구 내역 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">임대료 청구 내역</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {rents.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">임대료 청구 내역이 없습니다.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead>청구년월</TableHead>
-                  <TableHead className="text-right">임대료</TableHead>
-                  <TableHead className="text-right">부가세</TableHead>
-                  <TableHead className="text-right">납부금액</TableHead>
-                  <TableHead className="text-center">상태</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rents.map(r => (
-                  <TableRow key={r.id}>
-                    <TableCell className="text-sm text-gray-700">
-                      {r.billing_year}년 {r.billing_month}월
-                    </TableCell>
-                    <TableCell className="text-right text-gray-700">{formatKRW(r.amount)}</TableCell>
-                    <TableCell className="text-right text-gray-500">{formatKRW(r.vat_amount)}</TableCell>
-                    <TableCell className="text-right font-medium text-gray-800">
-                      {formatKRW(r.paid_amount)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {rentStatusBadge(r.status)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <RentJournalSection
+        contractId={id}
+        monthlyRent={contract.monthly_rent}
+        managementFee={contract.monthly_management_fee}
+        lesseeName={contract.lessee_name}
+        startDate={contract.start_date}
+        endDate={contract.end_date}
+        contractType={contract.contract_type}
+        rents={rents}
+        entries={rentEntries}
+      />
+
+      {/* 비용지출 내역 */}
+      <ExpenseSection
+        contractId={id}
+        lesseeName={contract.lessee_name}
+        entries={expenseEntries}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -133,16 +133,21 @@ function makeDefaultLines(type: JournalEntryType, acctMap: Record<string, string
 // ────────────────────────────────────────
 // 컴포넌트
 // ────────────────────────────────────────
-export default function NewJournalEntryPage() {
+function NewJournalEntryPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initContractId = searchParams.get('contract_id') ?? ''
+  const initEntryType = searchParams.get('entry_type') as JournalEntryType | null
 
   const [entryDate, setEntryDate]     = useState(TODAY)
-  const [entryType, setEntryType]     = useState<JournalEntryType>('비용지출')
+  const [entryType, setEntryType]     = useState<JournalEntryType>(
+    initEntryType && ENTRY_TYPES.includes(initEntryType) ? initEntryType : '비용지출'
+  )
   const [description, setDescription] = useState('')
   const [vendorId, setVendorId]       = useState<string>('')
   const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>('')
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
-  const [contractId, setContractId]   = useState<string>('')
+  const [contractId, setContractId]   = useState<string>(initContractId)
   const [uploading, setUploading]     = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -176,8 +181,9 @@ export default function NewJournalEntryPage() {
         const map: Record<string, string> = {}
         list.forEach(a => { map[a.code] = a.name })
         setAcctMap(map)
-        // 계정 맵 로딩 후 기본 라인 초기화
-        setLines(makeDefaultLines('비용지출', map))
+        // 계정 맵 로딩 후 기본 라인 초기화 (initEntryType 반영)
+        const resolvedType = initEntryType && ENTRY_TYPES.includes(initEntryType) ? initEntryType : '비용지출'
+        setLines(makeDefaultLines(resolvedType, map))
       })
       .catch(() => {})
 
@@ -776,5 +782,13 @@ export default function NewJournalEntryPage() {
         </div>
       </form>
     </div>
+  )
+}
+
+export default function NewJournalEntryPage() {
+  return (
+    <Suspense>
+      <NewJournalEntryPageInner />
+    </Suspense>
   )
 }
