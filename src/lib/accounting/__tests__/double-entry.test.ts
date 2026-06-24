@@ -30,6 +30,7 @@ const mockContract = (overrides = {}): LeaseContract => ({
   monthly_management_fee: null,
   vat_included: false,
   payment_due_day: 1,
+  payment_condition: '선불',
   auto_renewal: false,
   auto_journal_rent: false,
   auto_journal_mgmt: false,

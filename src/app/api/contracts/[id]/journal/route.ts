@@ -49,9 +49,25 @@ export async function POST(
   // ── 일괄 생성 ──────────────────────────────────────────────
   if (body.bulk === true) {
     const startDate = new Date(contract.start_date)
-    const endDate   = new Date(contract.end_date)
     const today     = new Date()
-    const limitDate = today < endDate ? today : endDate
+
+    // from_year/to_year: 사용자 지정 생성 연도 범위 (기본: 계약시작연도 ~ 올해)
+    const fromYear: number = body.from_year ?? startDate.getFullYear()
+    const toYear: number   = body.to_year   ?? today.getFullYear()
+
+    // 후불: 첫 납부월 = 계약시작월 + 1 / 선불: 계약시작월
+    const isPostpaid = (contract as any).payment_condition === '후불'
+    const firstMonth = isPostpaid ? startDate.getMonth() + 1 : startDate.getMonth()
+    const contractFirstMonth = new Date(startDate.getFullYear(), firstMonth, 1)
+
+    // cur: max(계약 첫 납부월, from_year 1월)
+    const fromStart = new Date(fromYear, 0, 1)
+    const cur = contractFirstMonth > fromStart ? new Date(contractFirstMonth) : new Date(fromStart)
+
+    // limit: min(to_year 12월, 이번달) — 미래 전표 생성 방지
+    const toYearDec = new Date(toYear, 11, 1)
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    const limit = toYearDec < thisMonth ? toYearDec : thisMonth
 
     // 이미 등록된 임대수익 엔트리의 year-month 목록 조회
     const { data: linkedLines } = await supabase
@@ -74,16 +90,9 @@ export async function POST(
       }
     }
 
-    // 필요한 연도의 fiscal_year 자동 생성 (없을 때만)
     const payDay = startDate.getDate()
     let created = 0
     const errors: string[] = []
-
-    // 후불: 첫 납부월 = 계약시작월 + 1 / 선불: 계약시작월
-    const isPostpaid = (contract as any).payment_condition === '후불'
-    const firstMonth = isPostpaid ? startDate.getMonth() + 1 : startDate.getMonth()
-    const cur = new Date(startDate.getFullYear(), firstMonth, 1)
-    const limit = new Date(limitDate.getFullYear(), limitDate.getMonth(), 1)
 
     {
       const neededYears = new Set<number>()
@@ -197,4 +206,54 @@ export async function POST(
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
+}
+
+// ── 임시전표 전체 삭제 ──────────────────────────────────────
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: contractId } = await params
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // 이 계약에 연결된 journal_entry_id 목록
+  const { data: linkedLines } = await supabase
+    .from('journal_entry_lines')
+    .select('journal_entry_id')
+    .eq('contract_id', contractId)
+
+  const entryIds = [...new Set((linkedLines ?? []).map(r => r.journal_entry_id as string))]
+
+  if (entryIds.length === 0) {
+    return NextResponse.json({ deleted: 0 })
+  }
+
+  // draft 상태인 것만 필터
+  const { data: drafts } = await supabase
+    .from('journal_entries')
+    .select('id')
+    .in('id', entryIds)
+    .eq('status', 'draft')
+
+  const draftIds = (drafts ?? []).map(e => e.id)
+
+  if (draftIds.length === 0) {
+    return NextResponse.json({ deleted: 0 })
+  }
+
+  // 헤더 삭제 (lines CASCADE, deposit/rent FK SET NULL)
+  const { data: deleted, error } = await supabase
+    .from('journal_entries')
+    .delete()
+    .in('id', draftIds)
+    .select('id')
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ deleted: (deleted ?? []).length })
 }

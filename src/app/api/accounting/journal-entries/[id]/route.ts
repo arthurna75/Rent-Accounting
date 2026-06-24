@@ -262,24 +262,21 @@ export async function DELETE(_req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: '역분개된 전표는 삭제할 수 없습니다.' }, { status: 409 })
   }
 
-  // 명세 먼저 삭제
-  const { error: linesError } = await supabase
-    .from('journal_entry_lines')
-    .delete()
-    .eq('journal_entry_id', id)
-
-  if (linesError) {
-    return NextResponse.json({ error: linesError.message }, { status: 500 })
-  }
-
   // 헤더 삭제
-  const { error: entryError } = await supabase
+  // - journal_entry_lines: ON DELETE CASCADE로 자동 삭제
+  // - deposit/rent_transactions.journal_entry_id: ON DELETE SET NULL으로 자동 처리
+  const { data: deleted, error: entryError } = await supabase
     .from('journal_entries')
     .delete()
     .eq('id', id)
+    .select('id')
 
   if (entryError) {
     return NextResponse.json({ error: entryError.message }, { status: 500 })
+  }
+
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json({ error: '전표를 삭제할 수 없습니다. (권한 없음)' }, { status: 403 })
   }
 
   return new NextResponse(null, { status: 204 })

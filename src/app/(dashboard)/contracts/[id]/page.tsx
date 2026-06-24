@@ -253,7 +253,6 @@ export default async function ContractDetailPage({ params }: PageProps) {
         managementFee={contract.monthly_management_fee}
         lesseeName={contract.lessee_name}
         startDate={contract.start_date}
-        endDate={contract.end_date}
         contractType={contract.contract_type}
         paymentCondition={contract.payment_condition ?? '선불'}
         rents={rents}

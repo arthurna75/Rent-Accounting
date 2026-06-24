@@ -42,7 +42,6 @@ interface Props {
   managementFee: number | null
   lesseeName: string
   startDate: string
-  endDate: string
   contractType: string
   paymentCondition: '선불' | '후불'
   rents: RentTransaction[]
@@ -126,9 +125,19 @@ export default function RentJournalSection({
   const [error, setError] = useState<string | null>(null)
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkMsg, setBulkMsg] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const startDay = new Date(startDate).getDate()
   const isJeonse = contractType === '전세'
+
+  const contractStartYear = new Date(startDate).getFullYear()
+  const currentYear = new Date().getFullYear()
+  const yearOptions = Array.from(
+    { length: currentYear - contractStartYear + 2 },
+    (_, i) => contractStartYear + i,
+  )
+  const [fromYear, setFromYear] = useState(contractStartYear)
+  const [toYear, setToYear] = useState(currentYear)
 
   function openForm(rowKey: string, year: number, month: number, defaultAmount: number, defaultType: RentEntryType) {
     if (form?.rowKey === rowKey) {
@@ -177,7 +186,7 @@ export default function RentJournalSection({
       const res = await fetch(`/api/contracts/${contractId}/journal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bulk: true }),
+        body: JSON.stringify({ bulk: true, from_year: fromYear, to_year: toYear }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? '실패')
@@ -188,6 +197,23 @@ export default function RentJournalSection({
       setBulkMsg(e instanceof Error ? e.message : '오류가 발생했습니다.')
     } finally {
       setBulkLoading(false)
+    }
+  }
+
+  async function handleDeleteDrafts() {
+    if (!window.confirm('이 계약의 임시(draft) 전표를 전체 삭제하시겠습니까?')) return
+    setDeleteLoading(true)
+    setBulkMsg(null)
+    try {
+      const res = await fetch(`/api/contracts/${contractId}/journal`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? '삭제 실패')
+      setBulkMsg(`임시전표 ${json.deleted}건 삭제됨`)
+      router.refresh()
+    } catch (e) {
+      setBulkMsg(e instanceof Error ? e.message : '오류가 발생했습니다.')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -207,16 +233,48 @@ export default function RentJournalSection({
             )}
           </div>
           {!isJeonse && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {bulkMsg && <span className="text-xs text-gray-500">{bulkMsg}</span>}
+              <div className="flex items-center gap-1">
+                <Select value={String(fromYear)} onValueChange={v => setFromYear(Number(v))}>
+                  <SelectTrigger className="h-7 w-[80px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}년</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-gray-400">~</span>
+                <Select value={String(toYear)} onValueChange={v => setToYear(Number(v))}>
+                  <SelectTrigger className="h-7 w-[80px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}년</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs"
+                className="text-xs h-7"
                 onClick={handleBulk}
-                disabled={bulkLoading}
+                disabled={bulkLoading || deleteLoading}
               >
-                {bulkLoading ? '생성 중...' : '전체 기간 임대료 생성'}
+                {bulkLoading ? '생성 중...' : '임대료 일괄 생성'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7 text-red-600 border-red-200 hover:bg-red-50"
+                onClick={handleDeleteDrafts}
+                disabled={bulkLoading || deleteLoading}
+              >
+                {deleteLoading ? '삭제 중...' : '임시전표 전체 삭제'}
               </Button>
             </div>
           )}
