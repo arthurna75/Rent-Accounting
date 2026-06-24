@@ -197,8 +197,14 @@ function NewJournalEntryPageInner() {
       .from('lease_contracts')
       .select('id, property_id, lessee_name, property:properties!property_id(building_name, unit_number)')
       .eq('status', 'active')
-      .order('property_id')
-      .then(({ data }) => setContracts((data ?? []) as ContractOption[]))
+      .then(({ data }) => {
+        const sorted = ((data ?? []) as ContractOption[]).sort((a, b) => {
+          const aKey = `${a.property?.building_name ?? ''} ${a.property?.unit_number ?? ''}`
+          const bKey = `${b.property?.building_name ?? ''} ${b.property?.unit_number ?? ''}`
+          return aKey.localeCompare(bKey, 'ko', { numeric: true })
+        })
+        setContracts(sorted)
+      })
   }, [])
 
   // ── 분개유형 변경 → 기본 라인 재설정 ──
@@ -557,7 +563,11 @@ function NewJournalEntryPageInner() {
                   <SelectTrigger><SelectValue placeholder="증빙 선택 (선택)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">없음</SelectItem>
-                    {EVIDENCE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {EVIDENCE_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>
+                        {t === '영수증' ? '영수증(또는 계좌이체)' : t}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
