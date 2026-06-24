@@ -8,11 +8,47 @@ import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Plus, Store, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Store, Pencil, Trash2, CheckCircle2, XCircle } from 'lucide-react'
 import type { Vendor } from '@/types/database'
 
 const CATEGORIES = ['중개업', '공공기관', '수리업', '판매업', '기타'] as const
 type Category = (typeof CATEGORIES)[number]
+
+// 주요 은행 목록 + 계좌번호 유효 자릿수 범위
+const BANKS: { name: string; min: number; max: number }[] = [
+  { name: 'KB국민은행',   min: 14, max: 14 },
+  { name: '신한은행',     min: 11, max: 13 },
+  { name: '우리은행',     min: 13, max: 13 },
+  { name: '하나은행',     min: 14, max: 14 },
+  { name: 'IBK기업은행',  min: 15, max: 16 },
+  { name: 'NH농협은행',   min: 12, max: 13 },
+  { name: 'SC제일은행',   min: 11, max: 12 },
+  { name: '카카오뱅크',   min: 15, max: 15 },
+  { name: '토스뱅크',     min: 13, max: 13 },
+  { name: '케이뱅크',     min: 11, max: 11 },
+  { name: '새마을금고',   min: 12, max: 15 },
+  { name: '신협',         min: 11, max: 13 },
+  { name: '우체국',       min: 13, max: 14 },
+  { name: '수협은행',     min: 12, max: 13 },
+  { name: '부산은행',     min: 12, max: 13 },
+  { name: '경남은행',     min: 12, max: 13 },
+  { name: '대구은행',     min: 11, max: 13 },
+  { name: '광주은행',     min: 12, max: 13 },
+  { name: '전북은행',     min: 12, max: 13 },
+  { name: '제주은행',     min: 11, max: 13 },
+  { name: '기타',         min: 10, max: 16 },
+]
+
+type AccountStatus = 'idle' | 'valid' | 'invalid'
+
+function validateAccountNumber(bankName: string, accountNumber: string): AccountStatus {
+  const digits = accountNumber.replace(/\D/g, '')
+  if (!digits) return 'idle'
+  const bank = BANKS.find(b => b.name === bankName)
+  const min = bank?.min ?? 10
+  const max = bank?.max ?? 16
+  return digits.length >= min && digits.length <= max ? 'valid' : 'invalid'
+}
 
 function todayStr(): string {
   return new Date().toISOString().split('T')[0]
@@ -265,23 +301,50 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="v_bank">은행명</Label>
-                      <Input
-                        id="v_bank"
-                        value={form.bankName}
-                        onChange={e => setField('bankName', e.target.value)}
-                        placeholder="예) 국민은행"
-                      />
+                      <Select value={form.bankName} onValueChange={v => setField('bankName', v)}>
+                        <SelectTrigger id="v_bank">
+                          <SelectValue placeholder="은행 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BANKS.map(b => (
+                            <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="v_acct">계좌번호</Label>
-                      <Input
-                        id="v_acct"
-                        type="text"
-                        inputMode="numeric"
-                        value={form.accountNumber}
-                        onChange={e => setField('accountNumber', e.target.value)}
-                        placeholder="000-000-000000"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="v_acct"
+                          type="text"
+                          inputMode="numeric"
+                          value={form.accountNumber}
+                          onChange={e => setField('accountNumber', e.target.value)}
+                          placeholder="숫자만 입력"
+                          className="pr-8"
+                        />
+                        {(() => {
+                          const status = validateAccountNumber(form.bankName, form.accountNumber)
+                          if (status === 'valid') return (
+                            <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 pointer-events-none" />
+                          )
+                          if (status === 'invalid') return (
+                            <XCircle className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 pointer-events-none" />
+                          )
+                          return null
+                        })()}
+                      </div>
+                      {(() => {
+                        const status = validateAccountNumber(form.bankName, form.accountNumber)
+                        const bank = BANKS.find(b => b.name === form.bankName)
+                        if (status === 'invalid' && bank) return (
+                          <p className="text-xs text-red-500">
+                            {form.bankName} 계좌번호는 {bank.min === bank.max ? `${bank.min}자리` : `${bank.min}~${bank.max}자리`}입니다
+                          </p>
+                        )
+                        return null
+                      })()}
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="v_holder">예금주</Label>
