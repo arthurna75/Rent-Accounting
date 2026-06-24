@@ -206,8 +206,44 @@ export default function RentJournalSection({
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {rents.length === 0 ? (
+        {rents.length === 0 && entries.length === 0 ? (
           <p className="py-8 text-center text-sm text-gray-400">임대료 청구 내역이 없습니다.</p>
+        ) : rents.length === 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead>날짜</TableHead>
+                <TableHead>전표번호</TableHead>
+                <TableHead>적요</TableHead>
+                <TableHead className="text-right">금액</TableHead>
+                <TableHead className="text-center">상태</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map(e => {
+                const total = entryTotal(e)
+                const isDraft = e.status === 'draft'
+                return (
+                  <TableRow key={e.id}>
+                    <TableCell className="text-sm text-gray-600">{e.entry_date}</TableCell>
+                    <TableCell className="text-sm text-gray-500">{e.entry_number}</TableCell>
+                    <TableCell className="text-sm text-gray-700">{e.description}</TableCell>
+                    <TableCell className="text-right font-medium text-gray-800">{total > 0 ? formatKRW(total) : '—'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge
+                        variant="outline"
+                        className={isDraft
+                          ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          : 'bg-green-50 text-green-700 border-green-200'}
+                      >
+                        {isDraft ? '임시' : '확정'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         ) : (
           <Table>
             <TableHeader>
