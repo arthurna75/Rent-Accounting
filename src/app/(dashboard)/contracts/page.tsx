@@ -179,7 +179,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
       )}
 
       {/* 상태 탭 */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto scrollbar-hide">
         {STATUS_TABS.map(tab => {
           const isActive = activeStatus === tab.key
           const count = counts[tabCountKey(tab.key)]
@@ -218,11 +218,11 @@ export default async function ContractsPage({ searchParams }: PageProps) {
                 <TableRow className="bg-gray-50">
                   <TableHead>부동산</TableHead>
                   <TableHead>임차인</TableHead>
-                  <TableHead>계약유형</TableHead>
+                  <TableHead className="hidden md:table-cell">계약유형</TableHead>
                   <TableHead className="text-right">보증금</TableHead>
-                  <TableHead className="text-right">월세</TableHead>
-                  <TableHead>계약기간</TableHead>
-                  <TableHead className="text-center">만료까지</TableHead>
+                  <TableHead className="text-right hidden md:table-cell">월세</TableHead>
+                  <TableHead className="hidden lg:table-cell">계약기간</TableHead>
+                  <TableHead className="text-center hidden sm:table-cell">만료까지</TableHead>
                   <TableHead className="text-center">상태</TableHead>
                 </TableRow>
               </TableHeader>
@@ -244,7 +244,7 @@ export default async function ContractsPage({ searchParams }: PageProps) {
                         {c.lessee_name}
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <Link href={`/contracts/${c.id}`} className="block">
                         {contractTypeBadge(c.contract_type)}
                       </Link>
@@ -254,17 +254,17 @@ export default async function ContractsPage({ searchParams }: PageProps) {
                         {formatKRW(c.deposit_amount)}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right hidden md:table-cell">
                       <Link href={`/contracts/${c.id}`} className="block text-gray-700">
                         {c.contract_type === '전세' ? '—' : formatKRW(c.monthly_rent)}
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <Link href={`/contracts/${c.id}`} className="block text-xs text-gray-500">
                         {formatDate(c.start_date)} ~ {formatDate(c.end_date)}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center hidden sm:table-cell">
                       <Link href={`/contracts/${c.id}`} className="block">
                         <DDay dateStr={c.end_date} />
                       </Link>

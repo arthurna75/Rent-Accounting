@@ -46,7 +46,7 @@ export function Sidebar({ role = 'viewer', isSampleMode = false, isGuest = false
   const items = isGuest ? NAV_ITEMS : NAV_ITEMS.filter(i => i.roles.includes(role))
 
   return (
-    <aside className="flex flex-col w-56 h-full bg-white border-r border-gray-200">
+    <aside className="flex flex-col w-full h-full bg-white border-r border-gray-200">
       {/* 예시 모드 배너 */}
       {isSampleMode && (
         <div className="flex items-center justify-center gap-1.5 bg-amber-400 py-1.5 text-xs font-bold text-amber-900 tracking-wide shrink-0">

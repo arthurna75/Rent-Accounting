@@ -97,14 +97,14 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 w-32">전표번호</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 w-28">거래일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">적요</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600 w-24">유형</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">차변 합계</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">대변 합계</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600 w-20">상태</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-600 w-20">관리</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600 w-32 hidden md:table-cell">전표번호</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600 w-24">거래일</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600">적요</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600 w-20 hidden md:table-cell">유형</th>
+              <th className="text-right px-3 py-3 font-medium text-gray-600 w-28">차변</th>
+              <th className="text-right px-3 py-3 font-medium text-gray-600 w-28 hidden sm:table-cell">대변</th>
+              <th className="text-center px-3 py-3 font-medium text-gray-600 w-16">상태</th>
+              <th className="text-center px-3 py-3 font-medium text-gray-600 w-16">관리</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -130,28 +130,28 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
                     entry.status === 'reversed' && 'opacity-50'
                   )}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 hidden md:table-cell">
                     <span className="font-mono text-xs text-gray-700">{entry.entry_number}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 tabular-nums">{entry.entry_date}</td>
-                  <td className="px-4 py-3 text-gray-800 max-w-xs truncate">{entry.description}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 text-xs text-gray-600 tabular-nums whitespace-nowrap">{entry.entry_date}</td>
+                  <td className="px-3 py-3 text-gray-800 max-w-[120px] md:max-w-xs truncate">{entry.description}</td>
+                  <td className="px-3 py-3 hidden md:table-cell">
                     <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', typeColor)}>
                       {entry.entry_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-800">
+                  <td className="px-3 py-3 text-right tabular-nums text-xs text-gray-800">
                     {formatKRW(totalDebit)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-gray-800">
+                  <td className="px-3 py-3 text-right tabular-nums text-xs text-gray-800 hidden sm:table-cell">
                     {formatKRW(totalCredit)}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 py-3 text-center">
                     <Badge variant={statusConfig.variant} className="text-xs">
                       {statusConfig.label}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="flex items-center justify-center gap-1">
                       {/* 확정 버튼 — draft 전용 */}
                       {entry.status === 'draft' && (
@@ -194,7 +194,7 @@ export function JournalLedgerTable({ entries, page, totalPages, total }: Props) 
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50">
+      <div className="flex items-center justify-between px-3 py-3 border-t border-gray-100 bg-gray-50">
         <p className="text-xs text-gray-500">총 {total.toLocaleString()}건</p>
         <div className="flex gap-1">
           {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(p => (

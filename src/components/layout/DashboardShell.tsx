@@ -38,12 +38,12 @@ export function DashboardShell({
       )}
 
       {/* 사이드바 래퍼
-          - 모바일: fixed 포지션, 슬라이드 트랜지션
+          - 모바일: fixed 포지션, 슬라이드 트랜지션 (w-72 풀 터치 영역)
           - 태블릿/데스크탑(md+): relative 인-플로우 */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-30 transition-transform duration-300 ease-in-out',
-          'md:relative md:translate-x-0 md:inset-auto md:z-auto',
+          'fixed inset-y-0 left-0 z-30 transition-transform duration-300 ease-in-out w-64 sm:w-56',
+          'md:relative md:translate-x-0 md:inset-auto md:z-auto md:w-56',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >

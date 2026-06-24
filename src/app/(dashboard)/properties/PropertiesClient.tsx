@@ -162,9 +162,9 @@ export function PropertiesClient({ items }: { items: PropertyItem[] }) {
                   <TableHead>건물명</TableHead>
                   <TableHead>호실</TableHead>
                   <TableHead>유형</TableHead>
-                  <TableHead>주소</TableHead>
-                  <TableHead className="text-right">면적(㎡)</TableHead>
-                  <TableHead className="text-right">취득가</TableHead>
+                  <TableHead className="hidden md:table-cell">주소</TableHead>
+                  <TableHead className="text-right hidden lg:table-cell">면적(㎡)</TableHead>
+                  <TableHead className="text-right hidden lg:table-cell">취득가</TableHead>
                   <TableHead className="text-center">활성계약</TableHead>
                 </TableRow>
               </TableHeader>
@@ -206,17 +206,17 @@ export function PropertiesClient({ items }: { items: PropertyItem[] }) {
                           </span>
                         </Link>
                       </TableCell>
-                      <TableCell className="text-xs text-gray-500 max-w-[200px]">
+                      <TableCell className="text-xs text-gray-500 max-w-[200px] hidden md:table-cell">
                         <Link href={`/properties/${p.id}`} className="block truncate">
                           {address}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right text-sm text-gray-700">
+                      <TableCell className="text-right text-sm text-gray-700 hidden lg:table-cell">
                         <Link href={`/properties/${p.id}`} className="block">
                           {p.building_area != null ? p.building_area.toLocaleString('ko-KR') : '—'}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right text-sm text-gray-700">
+                      <TableCell className="text-right text-sm text-gray-700 hidden lg:table-cell">
                         <Link href={`/properties/${p.id}`} className="block">
                           {p.acquisition_cost != null ? formatKRW(p.acquisition_cost) : '—'}
                         </Link>

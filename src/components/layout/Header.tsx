@@ -57,8 +57,8 @@ export function Header({ user, organization, onMenuClick }: HeaderProps) {
         )}
       </div>
 
-      {/* 가운데: 바로가기 링크 — 항상 텍스트 표시, 넘칠 경우 가로 스크롤 */}
-      <div className="flex items-center gap-0.5 flex-1 overflow-x-auto scrollbar-hide min-w-0">
+      {/* 가운데: 바로가기 링크 — md 이상에서만 표시 */}
+      <div className="hidden md:flex items-center gap-0.5 flex-1 overflow-x-auto scrollbar-hide min-w-0">
         {QUICK_LINKS.map(({ label, href }) => (
           <a
             key={label}
