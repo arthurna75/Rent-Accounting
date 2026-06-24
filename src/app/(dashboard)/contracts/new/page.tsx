@@ -68,6 +68,7 @@ interface Vendor {
   id: string
   name: string
   business_number: string | null
+  category: string | null
 }
 
 interface FormState {
@@ -764,7 +765,7 @@ export default function NewContractPage() {
                         <Select value={form.payment_due_day} onValueChange={v => set('payment_due_day', v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                            {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
                               <SelectItem key={d} value={String(d)}>{d}일</SelectItem>
                             ))}
                           </SelectContent>
@@ -845,7 +846,7 @@ export default function NewContractPage() {
                             <SelectValue placeholder="거래처 선택" />
                           </SelectTrigger>
                           <SelectContent>
-                            {vendors.map(v => (
+                            {vendors.filter(v => v.category === '중개업').map(v => (
                               <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                             ))}
                           </SelectContent>

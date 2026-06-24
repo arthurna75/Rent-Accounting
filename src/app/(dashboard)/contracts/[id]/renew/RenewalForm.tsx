@@ -104,7 +104,7 @@ export default function RenewalForm({
     monthly_management_fee: '',
     payment_due_day:        String(originalContract.payment_due_day),
     payment_condition:      (originalContract.payment_condition ?? '선불') as '선불' | '후불',
-    vat_included:           originalContract.vat_included,
+    vat_included:           true,
     start_date:             '',
     end_date:               '',
     notes:                  '',
@@ -136,7 +136,7 @@ export default function RenewalForm({
                                 : '',
       payment_due_day:        String(originalContract.payment_due_day),
       payment_condition:      (originalContract.payment_condition ?? '선불') as '선불' | '후불',
-      vat_included:           originalContract.vat_included,
+      vat_included:           true,
       notes:                  originalContract.notes ?? '',
     }))
   }
@@ -435,7 +435,7 @@ export default function RenewalForm({
                 <Select value={form.payment_due_day} onValueChange={v => set('payment_due_day', v)}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
                       <SelectItem key={d} value={String(d)}>{d}일</SelectItem>
                     ))}
                   </SelectContent>
