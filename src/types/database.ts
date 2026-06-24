@@ -313,6 +313,9 @@ export interface Vendor {
   phone: string | null
   address: string | null
   registered_at: string | null
+  bank_name: string | null
+  account_number: string | null
+  account_holder: string | null
 }
 
 export interface JournalEntry {

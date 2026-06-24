@@ -49,6 +49,9 @@ const makeEmptyForm = () => ({
   address: '',
   registeredAt: todayStr(),
   memo: '',
+  bankName: '',
+  accountNumber: '',
+  accountHolder: '',
 })
 
 export function VendorsClient({ initial }: { initial: Vendor[] }) {
@@ -85,6 +88,9 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       address: v.address ?? '',
       registeredAt: v.registered_at ?? todayStr(),
       memo: v.memo ?? '',
+      bankName: v.bank_name ?? '',
+      accountNumber: v.account_number ?? '',
+      accountHolder: v.account_holder ?? '',
     })
     setError(null)
     setShowForm(true)
@@ -118,6 +124,9 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
         address: form.address.trim() || null,
         registered_at: form.registeredAt || null,
         memo: form.memo.trim() || null,
+        bank_name: form.bankName.trim() || null,
+        account_number: form.accountNumber.trim() || null,
+        account_holder: form.accountHolder.trim() || null,
       }
       const res = await fetch(
         editingId ? `/api/vendors/${editingId}` : '/api/vendors',
@@ -221,6 +230,8 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   <Label htmlFor="v_biz">사업자번호</Label>
                   <Input
                     id="v_biz"
+                    type="text"
+                    inputMode="numeric"
                     value={form.businessNumber}
                     onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
                     placeholder="000-00-00000"
@@ -231,6 +242,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   <Label htmlFor="v_phone">전화</Label>
                   <Input
                     id="v_phone"
+                    type="tel"
                     value={form.phone}
                     onChange={e => setField('phone', formatPhone(e.target.value))}
                     placeholder="02-1234-5678"
@@ -246,6 +258,43 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                     placeholder="주소"
                   />
                 </div>
+
+                {/* 계좌정보 */}
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">계좌정보</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="v_bank">은행명</Label>
+                      <Input
+                        id="v_bank"
+                        value={form.bankName}
+                        onChange={e => setField('bankName', e.target.value)}
+                        placeholder="예) 국민은행"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="v_acct">계좌번호</Label>
+                      <Input
+                        id="v_acct"
+                        type="text"
+                        inputMode="numeric"
+                        value={form.accountNumber}
+                        onChange={e => setField('accountNumber', e.target.value)}
+                        placeholder="000-000-000000"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="v_holder">예금주</Label>
+                      <Input
+                        id="v_holder"
+                        value={form.accountHolder}
+                        onChange={e => setField('accountHolder', e.target.value)}
+                        placeholder="예금주명"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="v_memo">메모</Label>
                   <Input
@@ -322,7 +371,12 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                 {v.phone && (
                   <div className="flex gap-2 items-baseline">
                     <span className="text-gray-400 text-xs w-14 shrink-0">전화</span>
-                    <span className="text-gray-700 text-sm">{v.phone}</span>
+                    <a
+                      href={`tel:${v.phone.replace(/\D/g, '')}`}
+                      className="text-blue-600 text-sm hover:underline"
+                    >
+                      {v.phone}
+                    </a>
                   </div>
                 )}
                 {v.business_number && (
@@ -335,6 +389,14 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                   <div className="flex gap-2 items-baseline">
                     <span className="text-gray-400 text-xs w-14 shrink-0">주소</span>
                     <span className="text-gray-600 text-sm truncate">{v.address}</span>
+                  </div>
+                )}
+                {(v.bank_name || v.account_number) && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">계좌</span>
+                    <span className="text-gray-700 text-sm">
+                      {[v.bank_name, v.account_number, v.account_holder].filter(Boolean).join(' · ')}
+                    </span>
                   </div>
                 )}
                 {v.memo && (

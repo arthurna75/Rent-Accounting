@@ -11,6 +11,9 @@ const VendorUpdateSchema = z.object({
   phone: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
   registered_at: z.string().optional().nullable(),
+  bank_name: z.string().optional().nullable(),
+  account_number: z.string().optional().nullable(),
+  account_holder: z.string().optional().nullable(),
 })
 
 export async function PATCH(
