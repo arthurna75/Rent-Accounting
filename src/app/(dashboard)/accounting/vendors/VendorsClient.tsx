@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Plus, Store, Pencil, Trash2, CheckCircle2, XCircle } from 'lucide-react'
+import { Plus, Store, Pencil, Trash2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import type { Vendor } from '@/types/database'
 
 const CATEGORIES = ['중개업', '공공기관', '수리업', '판매업', '기타'] as const
@@ -98,6 +98,16 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [accountConfirmed, setAccountConfirmed] = useState(false)
+  const [bizVerifying, setBizVerifying] = useState(false)
+  const [bizResult, setBizResult] = useState<{
+    valid: boolean
+    checksum: boolean
+    api_used: boolean
+    status?: string
+    tax_type?: string
+    end_dt?: string | null
+    message: string
+  } | null>(null)
 
   const loadVendors = useCallback(async () => {
     try {
@@ -112,6 +122,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     setForm(makeEmptyForm())
     setError(null)
     setAccountConfirmed(false)
+    setBizResult(null)
     setShowForm(true)
   }
 
@@ -132,6 +143,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     })
     setError(null)
     setAccountConfirmed(false)
+    setBizResult(null)
     setShowForm(true)
   }
 
@@ -146,7 +158,27 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     value: ReturnType<typeof makeEmptyForm>[K]
   ) {
     if (key === 'accountNumber' || key === 'bankName') setAccountConfirmed(false)
+    if (key === 'businessNumber') setBizResult(null)
     setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  async function verifyBizNumber() {
+    if (!form.businessNumber.trim()) return
+    setBizVerifying(true)
+    setBizResult(null)
+    try {
+      const res = await fetch('/api/vendors/verify-biz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_number: form.businessNumber }),
+      })
+      const json = await res.json()
+      setBizResult(json)
+    } catch {
+      setBizResult({ valid: false, checksum: false, api_used: false, message: '조회 중 오류가 발생했습니다.' })
+    } finally {
+      setBizVerifying(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -268,15 +300,58 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_biz">사업자번호</Label>
-                  <Input
-                    id="v_biz"
-                    type="text"
-                    inputMode="numeric"
-                    value={form.businessNumber}
-                    onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
-                    placeholder="000-00-00000"
-                    maxLength={12}
-                  />
+                  <div className="flex gap-1.5">
+                    <Input
+                      id="v_biz"
+                      type="text"
+                      inputMode="numeric"
+                      value={form.businessNumber}
+                      onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
+                      placeholder="000-00-00000"
+                      maxLength={12}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 text-xs h-9 px-2.5"
+                      onClick={verifyBizNumber}
+                      disabled={bizVerifying || form.businessNumber.replace(/\D/g, '').length !== 10}
+                    >
+                      {bizVerifying
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : '조회'}
+                    </Button>
+                  </div>
+                  {bizResult && (
+                    <div className={`rounded-md border p-2 text-xs space-y-0.5 ${
+                      !bizResult.checksum
+                        ? 'border-red-200 bg-red-50 text-red-700'
+                        : bizResult.api_used && !bizResult.valid
+                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border-green-200 bg-green-50 text-green-700'
+                    }`}>
+                      <div className="flex items-center gap-1 font-medium">
+                        {!bizResult.checksum || (bizResult.api_used && !bizResult.valid)
+                          ? <XCircle className="w-3.5 h-3.5" />
+                          : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {bizResult.message}
+                      </div>
+                      {bizResult.api_used && bizResult.status && (
+                        <div className="text-[11px] opacity-80">
+                          상태: {bizResult.status}
+                          {bizResult.tax_type ? ` · ${bizResult.tax_type}` : ''}
+                          {bizResult.end_dt ? ` · 폐업일: ${bizResult.end_dt}` : ''}
+                        </div>
+                      )}
+                      {!bizResult.api_used && bizResult.checksum && (
+                        <div className="text-[11px] opacity-70">
+                          국세청 실시간 조회를 사용하려면 관리자에게 API 키 설정을 요청하세요.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_phone">전화</Label>
