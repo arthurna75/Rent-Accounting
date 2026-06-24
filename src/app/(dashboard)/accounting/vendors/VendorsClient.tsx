@@ -97,6 +97,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
   const [form, setForm] = useState(makeEmptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [accountConfirmed, setAccountConfirmed] = useState(false)
 
   const loadVendors = useCallback(async () => {
     try {
@@ -110,6 +111,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     setEditingId(null)
     setForm(makeEmptyForm())
     setError(null)
+    setAccountConfirmed(false)
     setShowForm(true)
   }
 
@@ -129,6 +131,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       accountHolder: v.account_holder ?? '',
     })
     setError(null)
+    setAccountConfirmed(false)
     setShowForm(true)
   }
 
@@ -142,6 +145,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     key: K,
     value: ReturnType<typeof makeEmptyForm>[K]
   ) {
+    if (key === 'accountNumber' || key === 'bankName') setAccountConfirmed(false)
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
@@ -326,7 +330,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                         />
                         {(() => {
                           const status = validateAccountNumber(form.bankName, form.accountNumber)
-                          if (status === 'valid') return (
+                          if (status === 'valid' || accountConfirmed) return (
                             <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 pointer-events-none" />
                           )
                           if (status === 'invalid') return (
@@ -338,10 +342,24 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                       {(() => {
                         const status = validateAccountNumber(form.bankName, form.accountNumber)
                         const bank = BANKS.find(b => b.name === form.bankName)
-                        if (status === 'invalid' && bank) return (
-                          <p className="text-xs text-red-500">
-                            {form.bankName} 계좌번호는 {bank.min === bank.max ? `${bank.min}자리` : `${bank.min}~${bank.max}자리`}입니다
-                          </p>
+                        const digits = form.accountNumber.replace(/\D/g, '').length
+                        if (status === 'invalid' && bank && !accountConfirmed) return (
+                          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 space-y-1">
+                            <p className="text-xs text-amber-700">
+                              {form.bankName} 계좌번호는 {bank.min === bank.max ? `${bank.min}자리` : `${bank.min}~${bank.max}자리`}입니다.
+                              입력된 자릿수는 {digits}자리입니다.
+                            </p>
+                            <p className="text-xs text-amber-700">계속 진행하시려면 확인을 클릭하십시오.</p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                              onClick={() => setAccountConfirmed(true)}
+                            >
+                              확인
+                            </Button>
+                          </div>
                         )
                         return null
                       })()}
