@@ -175,7 +175,8 @@ export default function RentJournalSection({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? '실패')
-      setBulkMsg(`${json.created}건 생성됨`)
+      const errCount = json.errors?.length ?? 0
+      setBulkMsg(errCount > 0 ? `${json.created}건 생성됨 (실패 ${errCount}건: ${json.errors[0]})` : `${json.created}건 생성됨`)
       router.refresh()
     } catch (e) {
       setBulkMsg(e instanceof Error ? e.message : '오류가 발생했습니다.')

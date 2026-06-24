@@ -74,13 +74,32 @@ export async function POST(
       }
     }
 
-    // 매월 엔트리 생성
+    // 필요한 연도의 fiscal_year 자동 생성 (없을 때만)
     const payDay = startDate.getDate()
     let created = 0
     const errors: string[] = []
 
     const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
     const limit = new Date(limitDate.getFullYear(), limitDate.getMonth(), 1)
+
+    {
+      const neededYears = new Set<number>()
+      const c = new Date(cur)
+      while (c <= limit) { neededYears.add(c.getFullYear()); c.setMonth(c.getMonth() + 1) }
+      for (const yr of neededYears) {
+        const { data: fyExists } = await supabase
+          .from('fiscal_years').select('id').eq('organization_id', organizationId).eq('year', yr).maybeSingle()
+        if (!fyExists) {
+          await supabase.from('fiscal_years').insert({
+            organization_id: organizationId,
+            year: yr,
+            start_date: `${yr}-01-01`,
+            end_date: `${yr}-12-31`,
+            is_closed: false,
+          })
+        }
+      }
+    }
 
     while (cur <= limit) {
       const yearMonth = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`
@@ -135,6 +154,22 @@ export async function POST(
   const mapping = ENTRY_LINES[entry_type]
   if (!mapping) {
     return NextResponse.json({ error: `지원하지 않는 전표유형: ${entry_type}` }, { status: 400 })
+  }
+
+  // 단건: 해당 연도 fiscal_year 자동 생성
+  const singleYear = new Date(entry_date).getFullYear()
+  {
+    const { data: fyExists } = await supabase
+      .from('fiscal_years').select('id').eq('organization_id', organizationId).eq('year', singleYear).maybeSingle()
+    if (!fyExists) {
+      await supabase.from('fiscal_years').insert({
+        organization_id: organizationId,
+        year: singleYear,
+        start_date: `${singleYear}-01-01`,
+        end_date: `${singleYear}-12-31`,
+        is_closed: false,
+      })
+    }
   }
 
   try {
