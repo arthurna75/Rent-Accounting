@@ -487,7 +487,7 @@ export default function NewContractPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
 
         {/* ── 좌우 분할 패널 ── */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* ── 왼쪽: 부동산 선택 + 기존 계약 (변경전) ── */}
           <div className="space-y-4">
@@ -921,7 +921,7 @@ export default function NewContractPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 space-y-1">
                   <p className="text-xs text-gray-500">변경전 환산보증금</p>
                   <p className="text-base font-bold text-gray-800">

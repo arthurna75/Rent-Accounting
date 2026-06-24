@@ -245,7 +245,7 @@ export default function RenewalForm({
     <form onSubmit={handleSubmit} className="space-y-5">
 
       {/* ── 좌우 패널 ── */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* 변경전 */}
         <Card className="border-gray-200">
@@ -551,7 +551,7 @@ export default function RenewalForm({
           </div>
 
           {/* 3열 계산 카드 */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 space-y-1">
               <p className="text-xs text-gray-500">변경전 환산보증금</p>
               <p className="text-base font-bold text-gray-800">

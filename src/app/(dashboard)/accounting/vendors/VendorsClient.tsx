@@ -173,7 +173,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="v_date">등록일자</Label>
                   <Input
@@ -237,7 +237,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                     maxLength={13}
                   />
                 </div>
-                <div className="col-span-2 space-y-1.5">
+                <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="v_address">주소</Label>
                   <Input
                     id="v_address"
@@ -246,7 +246,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                     placeholder="주소"
                   />
                 </div>
-                <div className="col-span-2 space-y-1.5">
+                <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="v_memo">메모</Label>
                   <Input
                     id="v_memo"
@@ -270,68 +270,91 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
         </Card>
       )}
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1000px]">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-28">등록일자</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-20">분류</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">거래처명</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-24">대표자</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-32">전화</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-36">사업자번호</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-40">주소</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-32">메모</th>
-                  <th className="px-4 py-3 w-20"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {vendors.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="text-center py-10 text-gray-400">
-                      등록된 거래처가 없습니다.
-                    </td>
-                  </tr>
-                )}
-                {vendors.map(v => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500">{v.registered_at ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{v.category ?? '-'}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{v.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{v.representative ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{v.phone ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-500">{v.business_number ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[10rem] truncate">{v.address ?? '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[8rem] truncate">{v.memo ?? '-'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-blue-600 hover:text-blue-800"
-                          onClick={() => openEdit(v)}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                          onClick={() => handleDelete(v.id, v.name)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* 카드 그리드 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        {vendors.length === 0 && (
+          <div className="col-span-full text-center py-16 text-gray-400">
+            <Store className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+            <p>등록된 거래처가 없습니다.</p>
           </div>
-        </CardContent>
-      </Card>
+        )}
+        {vendors.map(v => (
+          <Card key={v.id} className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4">
+              {/* 헤더: 거래처명 + 분류 배지 + 수정/삭제 */}
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">{v.name}</p>
+                  {v.category && (
+                    <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                      {v.category}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-blue-600 hover:text-blue-800"
+                    onClick={() => openEdit(v)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                    onClick={() => handleDelete(v.id, v.name)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* 정보 행 */}
+              <div className="space-y-1.5">
+                {v.representative && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">대표자</span>
+                    <span className="text-gray-700 text-sm">{v.representative}</span>
+                  </div>
+                )}
+                {v.phone && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">전화</span>
+                    <span className="text-gray-700 text-sm">{v.phone}</span>
+                  </div>
+                )}
+                {v.business_number && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">사업자</span>
+                    <span className="text-gray-700 text-sm font-mono">{v.business_number}</span>
+                  </div>
+                )}
+                {v.address && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">주소</span>
+                    <span className="text-gray-600 text-sm truncate">{v.address}</span>
+                  </div>
+                )}
+                {v.memo && (
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-gray-400 text-xs w-14 shrink-0">메모</span>
+                    <span className="text-gray-500 text-sm truncate">{v.memo}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 등록일 */}
+              {v.registered_at && (
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
+                  등록일 {v.registered_at}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   )
 }

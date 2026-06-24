@@ -17,6 +17,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { label: '사용방법',   href: '/landing',                      icon: HelpCircle,      roles: ['owner','accountant','viewer'] },
   { label: '대시보드',    href: '/',                             icon: LayoutDashboard, roles: ['owner','accountant','viewer'] },
   { label: '부동산',      href: '/properties',                   icon: Building2,       roles: ['owner','accountant','viewer'] },
   { label: '임대차계약',  href: '/contracts',                    icon: FileText,        roles: ['owner','accountant','viewer'] },
@@ -31,7 +32,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: '손익통계',    href: '/reports/pl-stats',            icon: TrendingUp,   roles: ['owner','accountant','viewer'] },
   { label: '시산표',      href: '/reports/trial-balance',       icon: BarChart3,    roles: ['owner','accountant'] },
   { label: '설정',        href: '/settings',                    icon: Settings,     roles: ['owner'] },
-  { label: '사용방법',   href: '/help',                         icon: HelpCircle,   roles: ['owner','accountant','viewer'] },
 ]
 
 interface SidebarProps {
