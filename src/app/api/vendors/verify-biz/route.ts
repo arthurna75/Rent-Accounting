@@ -49,11 +49,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 공공데이터포털 인코딩키를 URL에 그대로 사용 (encodeURIComponent 제거)
+    // query + Authorization 헤더 동시 전달 (odcloud 키 방식에 따라 하나만 유효)
     const url = `https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${apiKey}&returnType=JSON`
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': apiKey,
+      },
       body: JSON.stringify({ b_no: [digits] }),
     })
 
