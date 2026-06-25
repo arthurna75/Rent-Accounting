@@ -49,17 +49,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(
-      `https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ b_no: [digits] }),
-      }
-    )
+    // 공공데이터포털 인코딩키를 URL에 그대로 사용 (encodeURIComponent 제거)
+    const url = `https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${apiKey}&returnType=JSON`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ b_no: [digits] }),
+    })
 
     if (!res.ok) {
-      throw new Error(`국세청 API 오류: ${res.status}`)
+      const errBody = await res.text().catch(() => '')
+      throw new Error(`국세청 API 오류: ${res.status}${errBody ? ` (${errBody.slice(0, 200)})` : ''}`)
     }
 
     const json = await res.json()
