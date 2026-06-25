@@ -32,9 +32,14 @@ export default async function JournalPage({ searchParams }: PageProps) {
     .from('journal_entries')
     .select(`
       id, entry_number, entry_date, description, entry_type, status,
+      vendor:vendors!vendor_id (name),
       lines:journal_entry_lines (
         debit_amount, credit_amount,
-        account:chart_of_accounts!account_id (code, name)
+        account:chart_of_accounts!account_id (code, name),
+        contract:lease_contracts!contract_id (
+          lessee_name,
+          property:properties!property_id (building_name, unit_number)
+        )
       )
     `, { count: 'exact' })
     .order('entry_date', { ascending: false })
@@ -45,7 +50,8 @@ export default async function JournalPage({ searchParams }: PageProps) {
   if (params.from) query = query.gte('entry_date', params.from)
   if (params.to) query = query.lte('entry_date', params.to)
 
-  const { data: entries, count } = await query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rawEntries, count } = await query as any
   const totalPages = Math.ceil((count ?? 0) / limit)
 
   return (
@@ -61,10 +67,11 @@ export default async function JournalPage({ searchParams }: PageProps) {
       </div>
 
       <JournalLedgerTable
-        entries={entries ?? []}
+        entries={rawEntries ?? []}
         page={page}
         totalPages={totalPages}
         total={count ?? 0}
+        filterStatus={params.status}
       />
     </div>
   )
