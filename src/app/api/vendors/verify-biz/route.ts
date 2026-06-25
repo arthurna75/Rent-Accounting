@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. 국세청 API 조회 (API 키가 있을 때만)
-  const apiKey = process.env.ODCLOUD_API_KEY
+  // BOM(﻿) 및 공백 제거 — Vercel 환경변수 복붙 시 BOM이 끼는 경우 방어
+  const apiKey = process.env.ODCLOUD_API_KEY?.replace(/^﻿/, '').trim()
   if (!apiKey) {
     return NextResponse.json({
       valid: true,
