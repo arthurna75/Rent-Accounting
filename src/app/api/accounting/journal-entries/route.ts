@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
   const entryType = searchParams.get('entry_type')
   const fromDate = searchParams.get('from_date')
   const toDate = searchParams.get('to_date')
+  const vendorId = searchParams.get('vendor_id')
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = parseInt(searchParams.get('limit') ?? '50')
   const offset = (page - 1) * limit
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
   if (entryType) query = query.eq('entry_type', entryType as JournalEntryType)
   if (fromDate) query = query.gte('entry_date', fromDate)
   if (toDate) query = query.lte('entry_date', toDate)
+  if (vendorId) query = query.eq('vendor_id', vendorId)
 
   const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

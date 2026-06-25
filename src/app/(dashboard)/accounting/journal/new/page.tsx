@@ -138,13 +138,14 @@ function NewJournalEntryPageInner() {
   const searchParams = useSearchParams()
   const initContractId = searchParams.get('contract_id') ?? ''
   const initEntryType = searchParams.get('entry_type') as JournalEntryType | null
+  const initVendorId = searchParams.get('vendor_id') ?? ''
 
   const [entryDate, setEntryDate]     = useState(TODAY)
   const [entryType, setEntryType]     = useState<JournalEntryType>(
     initEntryType && ENTRY_TYPES.includes(initEntryType) ? initEntryType : '비용지출'
   )
   const [description, setDescription] = useState('')
-  const [vendorId, setVendorId]       = useState<string>('')
+  const [vendorId, setVendorId]       = useState<string>(initVendorId)
   const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>('')
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
   const [contractId, setContractId]   = useState<string>(initContractId)

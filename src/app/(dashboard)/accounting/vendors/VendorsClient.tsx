@@ -1,46 +1,91 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Plus, Store, Pencil, Trash2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import {
+  Plus, Store, Pencil, Trash2, CheckCircle2, XCircle, Loader2,
+  LayoutGrid, List, BookOpen, ExternalLink,
+} from 'lucide-react'
 import type { Vendor } from '@/types/database'
 
+// ── 상수 ─────────────────────────────────────────────────────
 const CATEGORIES = ['중개업', '공공기관', '수리업', '판매업', '기타'] as const
 type Category = (typeof CATEGORIES)[number]
 
-// 주요 은행 목록 + 계좌번호 유효 자릿수 범위
+const CATEGORY_BADGE: Record<string, string> = {
+  중개업:  'bg-blue-100 text-blue-700',
+  공공기관: 'bg-green-100 text-green-700',
+  수리업:  'bg-orange-100 text-orange-700',
+  판매업:  'bg-purple-100 text-purple-700',
+  기타:    'bg-gray-100 text-gray-700',
+}
+
 const BANKS: { name: string; min: number; max: number }[] = [
-  { name: 'KB국민은행',   min: 14, max: 14 },
-  { name: '신한은행',     min: 11, max: 13 },
-  { name: '우리은행',     min: 13, max: 13 },
-  { name: '하나은행',     min: 14, max: 14 },
-  { name: 'IBK기업은행',  min: 15, max: 16 },
-  { name: 'NH농협은행',   min: 12, max: 13 },
-  { name: 'SC제일은행',   min: 11, max: 12 },
-  { name: '카카오뱅크',   min: 15, max: 15 },
-  { name: '토스뱅크',     min: 13, max: 13 },
-  { name: '케이뱅크',     min: 11, max: 11 },
-  { name: '새마을금고',   min: 12, max: 15 },
-  { name: '신협',         min: 11, max: 13 },
-  { name: '우체국',       min: 13, max: 14 },
-  { name: '수협은행',     min: 12, max: 13 },
-  { name: '부산은행',     min: 12, max: 13 },
-  { name: '경남은행',     min: 12, max: 13 },
-  { name: '대구은행',     min: 11, max: 13 },
-  { name: '광주은행',     min: 12, max: 13 },
-  { name: '전북은행',     min: 12, max: 13 },
-  { name: '제주은행',     min: 11, max: 13 },
-  { name: '기타',         min: 10, max: 16 },
+  { name: 'KB국민은행',  min: 14, max: 14 },
+  { name: '신한은행',    min: 11, max: 13 },
+  { name: '우리은행',    min: 13, max: 13 },
+  { name: '하나은행',    min: 14, max: 14 },
+  { name: 'IBK기업은행', min: 15, max: 16 },
+  { name: 'NH농협은행',  min: 12, max: 13 },
+  { name: 'SC제일은행',  min: 11, max: 12 },
+  { name: '카카오뱅크',  min: 15, max: 15 },
+  { name: '토스뱅크',   min: 13, max: 13 },
+  { name: '케이뱅크',   min: 11, max: 11 },
+  { name: '새마을금고',  min: 12, max: 15 },
+  { name: '신협',       min: 11, max: 13 },
+  { name: '우체국',     min: 13, max: 14 },
+  { name: '수협은행',   min: 12, max: 13 },
+  { name: '부산은행',   min: 12, max: 13 },
+  { name: '경남은행',   min: 12, max: 13 },
+  { name: '대구은행',   min: 11, max: 13 },
+  { name: '광주은행',   min: 12, max: 13 },
+  { name: '전북은행',   min: 12, max: 13 },
+  { name: '제주은행',   min: 11, max: 13 },
+  { name: '기타',       min: 10, max: 16 },
 ]
 
 type AccountStatus = 'idle' | 'valid' | 'invalid'
 
+// ── localStorage 계좌 확인 영속성 ────────────────────────────
+const LS_ACCT_KEY = 'confirmed_account_numbers_v1'
+
+function confirmedAcctKey(bankName: string, accountNumber: string) {
+  return `${bankName}__${accountNumber.replace(/\D/g, '')}`
+}
+function isAccountPreviouslyConfirmed(bankName: string, accountNumber: string): boolean {
+  if (!bankName || !accountNumber) return false
+  try {
+    const raw = localStorage.getItem(LS_ACCT_KEY)
+    const list: string[] = raw ? JSON.parse(raw) : []
+    return list.includes(confirmedAcctKey(bankName, accountNumber))
+  } catch { return false }
+}
+function persistAccountConfirmed(bankName: string, accountNumber: string) {
+  try {
+    const raw = localStorage.getItem(LS_ACCT_KEY)
+    const list: string[] = raw ? JSON.parse(raw) : []
+    const key = confirmedAcctKey(bankName, accountNumber)
+    if (!list.includes(key)) {
+      list.push(key)
+      localStorage.setItem(LS_ACCT_KEY, JSON.stringify(list))
+    }
+  } catch { /* ignore */ }
+}
+
+// ── 유틸 ─────────────────────────────────────────────────────
 function validateAccountNumber(bankName: string, accountNumber: string): AccountStatus {
   const digits = accountNumber.replace(/\D/g, '')
   if (!digits) return 'idle'
@@ -50,9 +95,7 @@ function validateAccountNumber(bankName: string, accountNumber: string): Account
   return digits.length >= min && digits.length <= max ? 'valid' : 'invalid'
 }
 
-function todayStr(): string {
-  return new Date().toISOString().split('T')[0]
-}
+function todayStr() { return new Date().toISOString().split('T')[0] }
 
 function formatBizNum(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -90,23 +133,44 @@ const makeEmptyForm = () => ({
   accountHolder: '',
 })
 
+// ── 거래내역 타입 ─────────────────────────────────────────────
+interface JournalSummary {
+  id: string
+  entry_number: string
+  entry_date: string
+  description: string
+  entry_type: string
+  status: string
+  lines?: {
+    debit_amount: number
+    credit_amount: number
+    account?: { code: string; name: string } | null
+  }[]
+}
+
+// ── 메인 컴포넌트 ─────────────────────────────────────────────
 export function VendorsClient({ initial }: { initial: Vendor[] }) {
   const [vendors, setVendors] = useState<Vendor[]>(initial)
+  const [view, setView] = useState<'card' | 'table'>('card')
+
+  // 선택된 거래처 (상세 조회)
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
+  const [vendorJournals, setVendorJournals] = useState<JournalSummary[]>([])
+  const [journalsLoading, setJournalsLoading] = useState(false)
+
+  // 등록/수정 폼
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(makeEmptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [accountConfirmed, setAccountConfirmed] = useState(false)
+
+  // 사업자번호 조회
   const [bizVerifying, setBizVerifying] = useState(false)
   const [bizResult, setBizResult] = useState<{
-    valid: boolean
-    checksum: boolean
-    api_used: boolean
-    status?: string
-    tax_type?: string
-    end_dt?: string | null
-    message: string
+    valid: boolean; checksum: boolean; api_used: boolean
+    status?: string; tax_type?: string; end_dt?: string | null; message: string
   } | null>(null)
 
   const loadVendors = useCallback(async () => {
@@ -117,6 +181,23 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     } catch { /* ignore */ }
   }, [])
 
+  // ── 거래처 선택 → 상세 조회 ──────────────────────────────
+  async function selectVendor(v: Vendor) {
+    setSelectedVendor(v)
+    setVendorJournals([])
+    setJournalsLoading(true)
+    try {
+      const res = await fetch(`/api/accounting/journal-entries?vendor_id=${v.id}&limit=20`)
+      const json = await res.json()
+      setVendorJournals(json.data ?? [])
+    } catch { /* ignore */ } finally {
+      setJournalsLoading(false)
+    }
+  }
+
+  function closeDetail() { setSelectedVendor(null); setVendorJournals([]) }
+
+  // ── 폼 열기/닫기 ─────────────────────────────────────────
   function openCreate() {
     setEditingId(null)
     setForm(makeEmptyForm())
@@ -127,6 +208,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
   }
 
   function openEdit(v: Vendor) {
+    closeDetail()
     setEditingId(v.id)
     setForm({
       name: v.name,
@@ -142,26 +224,35 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       accountHolder: v.account_holder ?? '',
     })
     setError(null)
-    setAccountConfirmed(false)
+    // 이미 한 번 확인된 계좌번호는 확인 창 표시 안 함
+    setAccountConfirmed(
+      isAccountPreviouslyConfirmed(v.bank_name ?? '', v.account_number ?? '')
+    )
     setBizResult(null)
     setShowForm(true)
   }
 
-  function cancelForm() {
-    setShowForm(false)
-    setEditingId(null)
-    setError(null)
-  }
+  function cancelForm() { setShowForm(false); setEditingId(null); setError(null) }
 
   function setField<K extends keyof ReturnType<typeof makeEmptyForm>>(
-    key: K,
-    value: ReturnType<typeof makeEmptyForm>[K]
+    key: K, value: ReturnType<typeof makeEmptyForm>[K]
   ) {
-    if (key === 'accountNumber' || key === 'bankName') setAccountConfirmed(false)
+    if (key === 'accountNumber' || key === 'bankName') {
+      // 은행명/계좌번호가 바뀌면 → 새 조합 확인 여부 체크
+      const newBank    = key === 'bankName'    ? (value as string) : form.bankName
+      const newAcct    = key === 'accountNumber' ? (value as string) : form.accountNumber
+      setAccountConfirmed(isAccountPreviouslyConfirmed(newBank, newAcct))
+    }
     if (key === 'businessNumber') setBizResult(null)
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  function confirmAccount() {
+    setAccountConfirmed(true)
+    persistAccountConfirmed(form.bankName, form.accountNumber)
+  }
+
+  // ── 사업자번호 조회 ───────────────────────────────────────
   async function verifyBizNumber() {
     if (!form.businessNumber.trim()) return
     setBizVerifying(true)
@@ -172,8 +263,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ business_number: form.businessNumber }),
       })
-      const json = await res.json()
-      setBizResult(json)
+      setBizResult(await res.json())
     } catch {
       setBizResult({ valid: false, checksum: false, api_used: false, message: '조회 중 오류가 발생했습니다.' })
     } finally {
@@ -181,6 +271,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     }
   }
 
+  // ── 저장 ─────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -202,11 +293,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
       }
       const res = await fetch(
         editingId ? `/api/vendors/${editingId}` : '/api/vendors',
-        {
-          method: editingId ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
+        { method: editingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
       )
       if (!res.ok) {
         const json = await res.json()
@@ -221,121 +308,176 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     }
   }
 
+  // ── 삭제 ─────────────────────────────────────────────────
   async function handleDelete(id: string, name: string) {
     if (!confirm(`"${name}" 거래처를 삭제하시겠습니까?`)) return
+    closeDetail()
     try {
       const res = await fetch(`/api/vendors/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('삭제 실패')
       await loadVendors()
-    } catch {
-      alert('삭제 중 오류가 발생했습니다.')
-    }
+    } catch { alert('삭제 중 오류가 발생했습니다.') }
   }
 
+  // ── 렌더 헬퍼 ────────────────────────────────────────────
+  function VendorInfoRows({ v }: { v: Vendor }) {
+    return (
+      <div className="space-y-1.5">
+        {v.representative && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">대표자</span>
+            <span className="text-gray-700 text-sm">{v.representative}</span>
+          </div>
+        )}
+        {v.phone && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">전화</span>
+            <a href={`tel:${v.phone.replace(/\D/g, '')}`} className="text-blue-600 text-sm hover:underline">{v.phone}</a>
+          </div>
+        )}
+        {v.business_number && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">사업자</span>
+            <span className="text-gray-700 text-sm font-mono">{v.business_number}</span>
+          </div>
+        )}
+        {v.address && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">주소</span>
+            <span className="text-gray-600 text-sm">{v.address}</span>
+          </div>
+        )}
+        {(v.bank_name || v.account_number) && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">계좌</span>
+            <span className="text-gray-700 text-sm">
+              {[v.bank_name, v.account_number, v.account_holder].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+        )}
+        {v.memo && (
+          <div className="flex gap-2 items-baseline">
+            <span className="text-gray-400 text-xs w-14 shrink-0">메모</span>
+            <span className="text-gray-500 text-sm">{v.memo}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── 계정 확인 위젯 (폼 내부) ─────────────────────────────
+  function AccountWarning() {
+    const status = validateAccountNumber(form.bankName, form.accountNumber)
+    const bank = BANKS.find(b => b.name === form.bankName)
+    const digits = form.accountNumber.replace(/\D/g, '').length
+    if (status !== 'invalid' || !bank || accountConfirmed) return null
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-2 space-y-1">
+        <p className="text-xs text-amber-700">
+          {form.bankName} 계좌번호는{' '}
+          {bank.min === bank.max ? `${bank.min}자리` : `${bank.min}~${bank.max}자리`}입니다.
+          입력된 자릿수는 {digits}자리입니다.
+        </p>
+        <p className="text-xs text-amber-700">계속 진행하시려면 확인을 클릭하십시오.</p>
+        <Button
+          type="button" size="sm" variant="outline"
+          className="h-6 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+          onClick={confirmAccount}
+        >
+          확인
+        </Button>
+      </div>
+    )
+  }
+
+  // ────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+
+      {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Store className="w-5 h-5 text-gray-500" />
           <h2 className="text-xl font-semibold text-gray-900">거래처 관리</h2>
         </div>
-        <Button onClick={openCreate} size="sm" className="gap-1.5">
-          <Plus className="w-4 h-4" />
-          거래처 등록
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* 카드/리스트 토글 */}
+          <button
+            onClick={() => setView('card')}
+            className={`p-1.5 rounded-md transition-colors ${view === 'card' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+            title="카드 보기"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setView('table')}
+            className={`p-1.5 rounded-md transition-colors ${view === 'table' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+            title="목록 보기"
+          >
+            <List className="w-4 h-4" />
+          </button>
+          <Button onClick={openCreate} size="sm" className="gap-1.5">
+            <Plus className="w-4 h-4" />
+            거래처 등록
+          </Button>
+        </div>
       </div>
 
+      {/* 등록/수정 폼 */}
       {showForm && (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
+          <CardContent className="pt-5">
+            <p className="text-base font-semibold text-gray-800 mb-4">
               {editingId ? '거래처 수정' : '신규 거래처 등록'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="v_date">등록일자</Label>
-                  <Input
-                    id="v_date"
-                    type="date"
-                    value={form.registeredAt}
-                    onChange={e => setField('registeredAt', e.target.value)}
-                  />
+                  <Input id="v_date" type="date" value={form.registeredAt} onChange={e => setField('registeredAt', e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_category">분류</Label>
-                  <Select
-                    value={form.category}
-                    onValueChange={v => setField('category', v as Category)}
-                  >
-                    <SelectTrigger id="v_category">
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={form.category} onValueChange={v => setField('category', v as Category)}>
+                    <SelectTrigger id="v_category"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
+                      {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_name">거래처명 <span className="text-red-500">*</span></Label>
-                  <Input
-                    id="v_name"
-                    value={form.name}
-                    onChange={e => setField('name', e.target.value)}
-                    placeholder="예) 삼성화재, 국민은행"
-                  />
+                  <Input id="v_name" value={form.name} onChange={e => setField('name', e.target.value)} placeholder="예) 삼성화재, 국민은행" />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_rep">대표자</Label>
-                  <Input
-                    id="v_rep"
-                    value={form.representative}
-                    onChange={e => setField('representative', e.target.value)}
-                    placeholder="대표자명"
-                  />
+                  <Input id="v_rep" value={form.representative} onChange={e => setField('representative', e.target.value)} placeholder="대표자명" />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_biz">사업자번호</Label>
                   <div className="flex gap-1.5">
                     <Input
-                      id="v_biz"
-                      type="text"
-                      inputMode="numeric"
+                      id="v_biz" type="text" inputMode="numeric"
                       value={form.businessNumber}
                       onChange={e => setField('businessNumber', formatBizNum(e.target.value))}
-                      placeholder="000-00-00000"
-                      maxLength={12}
-                      className="flex-1"
+                      placeholder="000-00-00000" maxLength={12} className="flex-1"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0 text-xs h-9 px-2.5"
+                    <Button type="button" size="sm" variant="outline" className="shrink-0 text-xs h-9 px-2.5"
                       onClick={verifyBizNumber}
                       disabled={bizVerifying || form.businessNumber.replace(/\D/g, '').length !== 10}
                     >
-                      {bizVerifying
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : '조회'}
+                      {bizVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '조회'}
                     </Button>
                   </div>
                   {bizResult && (
                     <div className={`rounded-md border p-2 text-xs space-y-0.5 ${
-                      !bizResult.checksum
-                        ? 'border-red-200 bg-red-50 text-red-700'
-                        : bizResult.api_used && !bizResult.valid
-                          ? 'border-amber-200 bg-amber-50 text-amber-700'
-                          : 'border-green-200 bg-green-50 text-green-700'
+                      !bizResult.checksum ? 'border-red-200 bg-red-50 text-red-700'
+                        : bizResult.api_used && !bizResult.valid ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-green-200 bg-green-50 text-green-700'
                     }`}>
                       <div className="flex items-center gap-1 font-medium">
                         {!bizResult.checksum || (bizResult.api_used && !bizResult.valid)
-                          ? <XCircle className="w-3.5 h-3.5" />
-                          : <CheckCircle2 className="w-3.5 h-3.5" />}
+                          ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                         {bizResult.message}
                       </div>
                       {bizResult.api_used && bizResult.status && (
@@ -355,23 +497,11 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="v_phone">전화</Label>
-                  <Input
-                    id="v_phone"
-                    type="tel"
-                    value={form.phone}
-                    onChange={e => setField('phone', formatPhone(e.target.value))}
-                    placeholder="02-1234-5678"
-                    maxLength={13}
-                  />
+                  <Input id="v_phone" type="tel" value={form.phone} onChange={e => setField('phone', formatPhone(e.target.value))} placeholder="02-1234-5678" maxLength={13} />
                 </div>
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="v_address">주소</Label>
-                  <Input
-                    id="v_address"
-                    value={form.address}
-                    onChange={e => setField('address', e.target.value)}
-                    placeholder="주소"
-                  />
+                  <Input id="v_address" value={form.address} onChange={e => setField('address', e.target.value)} placeholder="주소" />
                 </div>
 
                 {/* 계좌정보 */}
@@ -381,13 +511,9 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                     <div className="space-y-1.5">
                       <Label htmlFor="v_bank">은행명</Label>
                       <Select value={form.bankName} onValueChange={v => setField('bankName', v)}>
-                        <SelectTrigger id="v_bank">
-                          <SelectValue placeholder="은행 선택" />
-                        </SelectTrigger>
+                        <SelectTrigger id="v_bank"><SelectValue placeholder="은행 선택" /></SelectTrigger>
                         <SelectContent>
-                          {BANKS.map(b => (
-                            <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>
-                          ))}
+                          {BANKS.map(b => <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -395,79 +521,41 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                       <Label htmlFor="v_acct">계좌번호</Label>
                       <div className="relative">
                         <Input
-                          id="v_acct"
-                          type="text"
-                          inputMode="numeric"
+                          id="v_acct" type="text" inputMode="numeric"
                           value={form.accountNumber}
                           onChange={e => setField('accountNumber', e.target.value)}
-                          placeholder="숫자만 입력"
-                          className="pr-8"
+                          placeholder="숫자만 입력" className="pr-8"
                         />
                         {(() => {
-                          const status = validateAccountNumber(form.bankName, form.accountNumber)
-                          if (status === 'valid' || accountConfirmed) return (
+                          const st = validateAccountNumber(form.bankName, form.accountNumber)
+                          if (st === 'valid' || accountConfirmed) return (
                             <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 pointer-events-none" />
                           )
-                          if (status === 'invalid') return (
+                          if (st === 'invalid') return (
                             <XCircle className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 pointer-events-none" />
                           )
                           return null
                         })()}
                       </div>
-                      {(() => {
-                        const status = validateAccountNumber(form.bankName, form.accountNumber)
-                        const bank = BANKS.find(b => b.name === form.bankName)
-                        const digits = form.accountNumber.replace(/\D/g, '').length
-                        if (status === 'invalid' && bank && !accountConfirmed) return (
-                          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 space-y-1">
-                            <p className="text-xs text-amber-700">
-                              {form.bankName} 계좌번호는 {bank.min === bank.max ? `${bank.min}자리` : `${bank.min}~${bank.max}자리`}입니다.
-                              입력된 자릿수는 {digits}자리입니다.
-                            </p>
-                            <p className="text-xs text-amber-700">계속 진행하시려면 확인을 클릭하십시오.</p>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
-                              onClick={() => setAccountConfirmed(true)}
-                            >
-                              확인
-                            </Button>
-                          </div>
-                        )
-                        return null
-                      })()}
+                      <AccountWarning />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="v_holder">예금주</Label>
-                      <Input
-                        id="v_holder"
-                        value={form.accountHolder}
-                        onChange={e => setField('accountHolder', e.target.value)}
-                        placeholder="예금주명"
-                      />
+                      <Input id="v_holder" value={form.accountHolder} onChange={e => setField('accountHolder', e.target.value)} placeholder="예금주명" />
                     </div>
                   </div>
                 </div>
 
                 <div className="sm:col-span-2 space-y-1.5">
                   <Label htmlFor="v_memo">메모</Label>
-                  <Input
-                    id="v_memo"
-                    value={form.memo}
-                    onChange={e => setField('memo', e.target.value)}
-                    placeholder="비고"
-                  />
+                  <Input id="v_memo" value={form.memo} onChange={e => setField('memo', e.target.value)} placeholder="비고" />
                 </div>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={cancelForm}>취소</Button>
                 <Button type="submit" disabled={submitting}>
-                  {submitting
-                    ? (editingId ? '수정 중...' : '등록 중...')
-                    : (editingId ? '수정' : '등록')}
+                  {submitting ? (editingId ? '수정 중...' : '등록 중...') : (editingId ? '수정' : '등록')}
                 </Button>
               </div>
             </form>
@@ -475,104 +563,221 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
         </Card>
       )}
 
-      {/* 카드 그리드 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {vendors.length === 0 && (
-          <div className="col-span-full text-center py-16 text-gray-400">
-            <Store className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-            <p>등록된 거래처가 없습니다.</p>
-          </div>
-        )}
-        {vendors.map(v => (
-          <Card key={v.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              {/* 헤더: 거래처명 + 분류 배지 + 수정/삭제 */}
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{v.name}</p>
-                  {v.category && (
-                    <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                      {v.category}
+      {/* ── 카드 뷰 ─────────────────────────────────────── */}
+      {view === 'card' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {vendors.length === 0 && (
+            <div className="col-span-full text-center py-16 text-gray-400">
+              <Store className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p>등록된 거래처가 없습니다.</p>
+            </div>
+          )}
+          {vendors.map(v => {
+            const badgeCls = CATEGORY_BADGE[v.category ?? '기타'] ?? CATEGORY_BADGE['기타']
+            return (
+              <button
+                key={v.id}
+                onClick={() => selectVendor(v)}
+                className="text-left w-full rounded-xl border bg-white shadow-sm hover:shadow-md hover:border-blue-200 transition-all p-4 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{v.name}</p>
+                    {v.category && (
+                      <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full border border-transparent ${badgeCls}`}>
+                        {v.category}
+                      </span>
+                    )}
+                  </div>
+                  <BookOpen className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
+                </div>
+                <div className="space-y-1">
+                  {v.representative && (
+                    <p className="text-xs text-gray-500 truncate">대표자 {v.representative}</p>
+                  )}
+                  {v.phone && <p className="text-xs text-gray-500 truncate">{v.phone}</p>}
+                  {v.business_number && (
+                    <p className="text-xs text-gray-400 font-mono">{v.business_number}</p>
+                  )}
+                  {(v.bank_name || v.account_number) && (
+                    <p className="text-xs text-gray-400 truncate">
+                      {[v.bank_name, v.account_number].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
+                {v.registered_at && (
+                  <p className="mt-3 pt-2 border-t border-gray-100 text-xs text-gray-300">
+                    등록일 {v.registered_at}
+                  </p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── 테이블 뷰 ────────────────────────────────────── */}
+      {view === 'table' && (
+        <Card>
+          <CardContent className="p-0">
+            {vendors.length === 0 ? (
+              <div className="text-center py-16 text-gray-400">
+                <Store className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p>등록된 거래처가 없습니다.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gray-50">
+                    <TableHead>거래처명</TableHead>
+                    <TableHead>분류</TableHead>
+                    <TableHead className="hidden md:table-cell">대표자</TableHead>
+                    <TableHead className="hidden md:table-cell">전화</TableHead>
+                    <TableHead className="hidden lg:table-cell">사업자번호</TableHead>
+                    <TableHead className="hidden lg:table-cell">계좌</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {vendors.map(v => {
+                    const badgeCls = CATEGORY_BADGE[v.category ?? '기타'] ?? CATEGORY_BADGE['기타']
+                    return (
+                      <TableRow
+                        key={v.id}
+                        onClick={() => selectVendor(v)}
+                        className="cursor-pointer hover:bg-blue-50/40 transition-colors"
+                      >
+                        <TableCell className="font-medium text-gray-900">{v.name}</TableCell>
+                        <TableCell>
+                          {v.category && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badgeCls}`}>
+                              {v.category}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600 hidden md:table-cell">
+                          {v.representative ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600 hidden md:table-cell">
+                          {v.phone ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-sm font-mono text-gray-500 hidden lg:table-cell">
+                          {v.business_number ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500 hidden lg:table-cell">
+                          {v.bank_name ? `${v.bank_name} ${v.account_number ?? ''}`.trim() : '—'}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 상세 조회 Dialog ─────────────────────────────── */}
+      <Dialog open={!!selectedVendor} onOpenChange={open => { if (!open) closeDetail() }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {selectedVendor && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <DialogTitle className="text-lg">{selectedVendor.name}</DialogTitle>
+                  {selectedVendor.category && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_BADGE[selectedVendor.category] ?? CATEGORY_BADGE['기타']}`}>
+                      {selectedVendor.category}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0 text-blue-600 hover:text-blue-800"
-                    onClick={() => openEdit(v)}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
+              </DialogHeader>
+
+              {/* 액션 버튼 */}
+              <div className="flex items-center gap-2 pt-1 pb-3 border-b">
+                <Link href={`/accounting/journal/new?vendor_id=${selectedVendor.id}`}>
+                  <Button size="sm" className="gap-1.5 h-8">
+                    <Plus className="w-3.5 h-3.5" />
+                    전표 등록
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                    onClick={() => handleDelete(v.id, v.name)}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+                </Link>
+                <Button
+                  size="sm" variant="outline" className="gap-1.5 h-8"
+                  onClick={() => openEdit(selectedVendor)}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  수정
+                </Button>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5 h-8 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
+                  onClick={() => handleDelete(selectedVendor.id, selectedVendor.name)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  삭제
+                </Button>
               </div>
 
-              {/* 정보 행 */}
-              <div className="space-y-1.5">
-                {v.representative && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">대표자</span>
-                    <span className="text-gray-700 text-sm">{v.representative}</span>
-                  </div>
-                )}
-                {v.phone && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">전화</span>
-                    <a
-                      href={`tel:${v.phone.replace(/\D/g, '')}`}
-                      className="text-blue-600 text-sm hover:underline"
-                    >
-                      {v.phone}
-                    </a>
-                  </div>
-                )}
-                {v.business_number && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">사업자</span>
-                    <span className="text-gray-700 text-sm font-mono">{v.business_number}</span>
-                  </div>
-                )}
-                {v.address && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">주소</span>
-                    <span className="text-gray-600 text-sm truncate">{v.address}</span>
-                  </div>
-                )}
-                {(v.bank_name || v.account_number) && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">계좌</span>
-                    <span className="text-gray-700 text-sm">
-                      {[v.bank_name, v.account_number, v.account_holder].filter(Boolean).join(' · ')}
-                    </span>
-                  </div>
-                )}
-                {v.memo && (
-                  <div className="flex gap-2 items-baseline">
-                    <span className="text-gray-400 text-xs w-14 shrink-0">메모</span>
-                    <span className="text-gray-500 text-sm truncate">{v.memo}</span>
-                  </div>
+              {/* 기본 정보 */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">기본 정보</h3>
+                <VendorInfoRows v={selectedVendor} />
+                {selectedVendor.registered_at && (
+                  <p className="text-xs text-gray-400">등록일 {selectedVendor.registered_at}</p>
                 )}
               </div>
 
-              {/* 등록일 */}
-              {v.registered_at && (
-                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
-                  등록일 {v.registered_at}
+              {/* 거래 내역 */}
+              <div className="space-y-3 pt-3 border-t">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">거래 내역</h3>
+                  <Link
+                    href={`/accounting/journal?vendor_id=${selectedVendor.id}`}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                  >
+                    분개장에서 전체 보기
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+                {journalsLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-gray-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    불러오는 중...
+                  </div>
+                ) : vendorJournals.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">등록된 거래 내역이 없습니다.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {vendorJournals.map(je => {
+                      const totalAmt = (je.lines ?? []).reduce(
+                        (s, l) => s + Math.max(l.debit_amount, l.credit_amount), 0
+                      )
+                      return (
+                        <Link key={je.id} href={`/accounting/journal/${je.id}`}>
+                          <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50/40 transition-colors">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-gray-900 truncate">{je.description}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{je.entry_type}</span>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-0.5">{je.entry_number} · {je.entry_date}</p>
+                            </div>
+                            {totalAmt > 0 && (
+                              <span className="text-sm font-semibold text-gray-700 shrink-0 tabular-nums">
+                                {totalAmt.toLocaleString('ko-KR')}원
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
