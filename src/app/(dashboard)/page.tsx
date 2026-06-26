@@ -1,18 +1,93 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatKRW } from '@/lib/utils/format'
-import { Building2, FileText, TrendingUp, AlertCircle, Wallet } from 'lucide-react'
+import { Building2, FileText, TrendingDown, Wallet } from 'lucide-react'
 import { SampleDashboard } from '@/components/sample/SampleDashboard'
+import { DashboardRentalCard } from '@/components/dashboard/DashboardRentalCard'
 
-async function getDashboardStats(organizationId: string) {
+// ── 묵시적 갱신 유효 만기일 계산 ───────────────────────────────
+// 계약 만기가 지났으면 1년씩 더해 현재 이후가 될 때까지 반복
+function calcEffectiveEndDate(endDateStr: string, now: Date): Date {
+  const parts = endDateStr.split('-').map(Number)
+  let d = new Date(parts[0], parts[1] - 1, parts[2])
+  while (d <= now) {
+    d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate())
+  }
+  return d
+}
+
+// 현재 → 유효 만기까지 남은 개월 수 (소수점 올림)
+function monthsUntil(target: Date, now: Date): number {
+  const diffMs = target.getTime() - now.getTime()
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44))
+}
+
+// ── 연간 임대수익 (journal_entries 기준) ────────────────────────
+async function getYearlyIncomeData(organizationId: string, year: number) {
   const supabase = await createClient()
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
-  const fromDate = `${year}-${String(month).padStart(2, '0')}-01`
-  const toDate = `${year}-${String(month).padStart(2, '0')}-31`
 
-  const [properties, contracts, unpaidRent, monthlyIncome, totalDeposit] = await Promise.all([
+  // 임대수익·관리비 유형의 승인 전표 라인 집계
+  const { data: entries } = await supabase
+    .from('journal_entries')
+    .select('entry_date, lines:journal_entry_lines(credit_amount)')
+    .eq('organization_id', organizationId)
+    .in('entry_type', ['임대수익', '관리비'])
+    .eq('status', 'posted')
+    .gte('entry_date', `${year}-01-01`)
+    .lte('entry_date', `${year}-12-31`)
+
+  const quarterly = { q1: 0, q2: 0, q3: 0, q4: 0 }
+
+  for (const entry of entries ?? []) {
+    const month = parseInt((entry.entry_date as string).split('-')[1], 10)
+    const qKey = `q${Math.ceil(month / 3)}` as keyof typeof quarterly
+    // 수익 전표에서 credit 합계 = 수익 금액
+    const income = ((entry.lines ?? []) as { credit_amount: number }[])
+      .reduce((s, l) => s + l.credit_amount, 0)
+    quarterly[qKey] += income
+  }
+
+  const yearTotal = quarterly.q1 + quarterly.q2 + quarterly.q3 + quarterly.q4
+  return { yearTotal, quarterly }
+}
+
+// ── 연간 총비용 (journal_entries 기준) ──────────────────────────
+async function getYearlyExpense(organizationId: string, year: number) {
+  const supabase = await createClient()
+
+  const { data: entries } = await supabase
+    .from('journal_entries')
+    .select('lines:journal_entry_lines(debit_amount)')
+    .eq('organization_id', organizationId)
+    .eq('entry_type', '비용지출')
+    .eq('status', 'posted')
+    .gte('entry_date', `${year}-01-01`)
+    .lte('entry_date', `${year}-12-31`)
+
+  return (entries ?? []).reduce((total, entry) => {
+    const lineSum = ((entry.lines ?? []) as { debit_amount: number }[])
+      .reduce((s, l) => s + l.debit_amount, 0)
+    return total + lineSum
+  }, 0)
+}
+
+// ── 보증금 잔액: 현재 활성 계약 보증금 합산 ─────────────────────
+async function getDepositBalance(organizationId: string) {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('lease_contracts')
+    .select('deposit_amount')
+    .eq('organization_id', organizationId)
+    .eq('status', 'active')
+
+  return (data ?? []).reduce((s, c) => s + (c.deposit_amount ?? 0), 0)
+}
+
+// ── 기본 통계 ────────────────────────────────────────────────────
+async function getBaseStats(organizationId: string) {
+  const supabase = await createClient()
+
+  const [properties, contracts] = await Promise.all([
     supabase.from('properties')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
@@ -22,35 +97,7 @@ async function getDashboardStats(organizationId: string) {
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .eq('status', 'active'),
-
-    supabase.from('rent_transactions')
-      .select('amount, paid_amount')
-      .eq('organization_id', organizationId)
-      .in('status', ['unpaid', 'partial', 'overdue']),
-
-    supabase.from('rent_transactions')
-      .select('amount, vat_amount')
-      .eq('organization_id', organizationId)
-      .eq('billing_year', year)
-      .eq('billing_month', month),
-
-    supabase.from('deposit_transactions')
-      .select('amount, transaction_type')
-      .eq('organization_id', organizationId),
   ])
-
-  const unpaidAmount = (unpaidRent.data ?? []).reduce(
-    (s, r) => s + (r.amount - r.paid_amount), 0
-  )
-
-  const monthlyRentalIncome = (monthlyIncome.data ?? []).reduce(
-    (s, r) => s + r.amount + r.vat_amount, 0
-  )
-
-  const depositBalance = (totalDeposit.data ?? []).reduce((s, r) => {
-    if (['수령', '증액'].includes(r.transaction_type)) return s + r.amount
-    return s - r.amount
-  }, 0)
 
   const totalProperties = properties.count ?? 0
   const activeContracts = contracts.count ?? 0
@@ -58,28 +105,41 @@ async function getDashboardStats(organizationId: string) {
     ? Math.round((activeContracts / totalProperties) * 100)
     : 0
 
-  return {
-    total_properties: totalProperties,
-    active_contracts: activeContracts,
-    monthly_rental_income: monthlyRentalIncome,
-    unpaid_rent_amount: unpaidAmount,
-    total_deposit: depositBalance,
-    occupancy_rate: occupancyRate,
-  }
+  return { totalProperties, activeContracts, occupancyRate }
 }
 
-async function getRecentContracts(organizationId: string) {
+// ── 만기 임박 계약 (묵시적 갱신 반영, 월 기준 정렬) ──────────────
+async function getExpiringContracts(organizationId: string) {
   const supabase = await createClient()
   const { data } = await supabase
     .from('lease_contracts')
-    .select('id, lessee_name, monthly_rent, deposit_amount, end_date, status, property:properties!property_id(name)')
+    .select(`
+      id, lessee_name, monthly_rent, deposit_amount, end_date,
+      property:properties!property_id (name)
+    `)
     .eq('organization_id', organizationId)
     .eq('status', 'active')
-    .order('end_date', { ascending: true })
-    .limit(5)
-  return data ?? []
+
+  if (!data) return []
+
+  const now = new Date()
+
+  const withEffective = data.map(c => {
+    const original = new Date(c.end_date)
+    const effective = calcEffectiveEndDate(c.end_date, now)
+    const isImplicit = effective.getFullYear() > original.getFullYear()
+      || effective.getTime() !== original.getTime()
+    const months = monthsUntil(effective, now)
+    return { ...c, effective, isImplicit, months }
+  })
+
+  // 유효 만기가 가장 짧게 남은 순
+  withEffective.sort((a, b) => a.effective.getTime() - b.effective.getTime())
+
+  return withEffective.slice(0, 6)
 }
 
+// ── 페이지 ───────────────────────────────────────────────────────
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -98,53 +158,17 @@ export default async function DashboardPage() {
 
   if ((propCount ?? 0) === 0) return <SampleDashboard isGuest={false} />
 
-  const [stats, recentContracts] = await Promise.all([
-    getDashboardStats(profile!.organization_id),
-    getRecentContracts(profile!.organization_id),
-  ])
+  const orgId = profile!.organization_id
+  const year  = new Date().getFullYear()
 
-  const now = new Date()
-  const currentMonth = `${now.getFullYear()}년 ${now.getMonth() + 1}월`
-
-  const statCards = [
-    {
-      title: '보유 부동산',
-      value: `${stats.total_properties}건`,
-      sub: `임대 중 ${stats.active_contracts}건`,
-      icon: Building2,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-    },
-    {
-      title: `${currentMonth} 임대수익`,
-      value: formatKRW(stats.monthly_rental_income),
-      sub: `공실률 ${100 - stats.occupancy_rate}%`,
-      icon: TrendingUp,
-      color: 'text-green-600',
-      bg: 'bg-green-50',
-    },
-    {
-      title: '미수임대료',
-      value: formatKRW(stats.unpaid_rent_amount),
-      sub: stats.unpaid_rent_amount > 0 ? '즉시 수금 필요' : '연체 없음',
-      icon: AlertCircle,
-      color: stats.unpaid_rent_amount > 0 ? 'text-red-600' : 'text-gray-400',
-      bg: stats.unpaid_rent_amount > 0 ? 'bg-red-50' : 'bg-gray-50',
-    },
-    {
-      title: '보증금 잔액',
-      value: formatKRW(stats.total_deposit),
-      sub: '반환 의무액',
-      icon: Wallet,
-      color: 'text-orange-600',
-      bg: 'bg-orange-50',
-    },
-  ]
-
-  const daysUntilExpiry = (dateStr: string) => {
-    const diff = new Date(dateStr).getTime() - Date.now()
-    return Math.ceil(diff / (1000 * 60 * 60 * 24))
-  }
+  const [baseStats, incomeData, totalExpense, depositBalance, expiringContracts] =
+    await Promise.all([
+      getBaseStats(orgId),
+      getYearlyIncomeData(orgId, year),
+      getYearlyExpense(orgId, year),
+      getDepositBalance(orgId),
+      getExpiringContracts(orgId),
+    ])
 
   return (
     <div className="space-y-6">
@@ -152,22 +176,63 @@ export default async function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map(card => (
-          <Card key={card.title}>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">{card.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                  <p className="text-xs text-gray-400 mt-1">{card.sub}</p>
-                </div>
-                <div className={`p-2 rounded-lg ${card.bg}`}>
-                  <card.icon className={`w-5 h-5 ${card.color}`} />
-                </div>
+
+        {/* 보유 부동산 */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">보유 부동산</p>
+                <p className="text-2xl font-bold text-gray-900">{baseStats.totalProperties}건</p>
+                <p className="text-xs text-gray-400 mt-1">임대 중 {baseStats.activeContracts}건</p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="p-2 rounded-lg bg-blue-50">
+                <Building2 className="w-5 h-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 임대수익 — 클라이언트 인터랙티브 카드 */}
+        <DashboardRentalCard
+          yearTotal={incomeData.yearTotal}
+          quarterly={incomeData.quarterly}
+          year={year}
+        />
+
+        {/* 총비용 */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">{year}년 총비용</p>
+                <p className="text-2xl font-bold text-gray-900">{formatKRW(totalExpense)}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {totalExpense > 0 ? '비용지출 전표 합계' : '지출 없음'}
+                </p>
+              </div>
+              <div className="p-2 rounded-lg bg-red-50">
+                <TrendingDown className="w-5 h-5 text-red-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 보증금 잔액 */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">보증금 잔액</p>
+                <p className="text-2xl font-bold text-gray-900">{formatKRW(depositBalance)}</p>
+                <p className="text-xs text-gray-400 mt-1">활성 계약 전체 · 반환 의무액</p>
+              </div>
+              <div className="p-2 rounded-lg bg-orange-50">
+                <Wallet className="w-5 h-5 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 만기 임박 계약 */}
@@ -176,34 +241,57 @@ export default async function DashboardPage() {
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <FileText className="w-4 h-4 text-gray-500" />
             만기 임박 계약
+            <span className="text-xs font-normal text-gray-400 ml-1">
+              · 묵시적 갱신 반영 — 만기가 경과하면 1년씩 자동 연장, 월 기준 오름차순 정렬
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {recentContracts.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">만기 임박 계약이 없습니다.</p>
+          {expiringContracts.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">활성 계약이 없습니다.</p>
           ) : (
-            <div className="space-y-3">
-              {recentContracts.map(c => {
-                const days = daysUntilExpiry(c.end_date)
-                const prop = (c.property as unknown) as { name: string } | null
+            <div className="space-y-2">
+              {expiringContracts.map(c => {
+                const prop = (c.property as unknown as { name: string } | null)
+                const effDateStr = c.effective.toLocaleDateString('ko-KR', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                })
+                const urgency = c.months <= 1 ? 'text-red-600 bg-red-50 border-red-200'
+                  : c.months <= 3 ? 'text-orange-600 bg-orange-50 border-orange-200'
+                  : 'text-gray-500 bg-gray-50 border-gray-200'
+
                 return (
-                  <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        {c.lessee_name}
-                        <span className="ml-2 text-xs text-gray-400">{prop?.name}</span>
-                      </p>
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between py-2 px-1 border-b border-gray-50 last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-medium text-gray-800">{c.lessee_name}</span>
+                        {prop?.name && (
+                          <span className="text-xs text-gray-400">{prop.name}</span>
+                        )}
+                        {c.isImplicit && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 whitespace-nowrap">
+                            묵시적갱신
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        월세 {formatKRW(c.monthly_rent)} | 보증금 {formatKRW(c.deposit_amount)}
+                        월세 {formatKRW(c.monthly_rent)} · 보증금 {formatKRW(c.deposit_amount)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        유효만기 {effDateStr}
+                        {c.isImplicit && (
+                          <span className="text-gray-300 ml-1">
+                            (원계약 {c.end_date})
+                          </span>
+                        )}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-medium text-gray-700">{c.end_date}</p>
-                      <span className={`text-xs font-semibold ${
-                        days <= 30 ? 'text-red-600' :
-                        days <= 90 ? 'text-orange-500' : 'text-gray-400'
-                      }`}>
-                        D{days >= 0 ? `-${days}` : `+${Math.abs(days)}`}
+                    <div className="text-right shrink-0 ml-3">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full border text-xs font-semibold ${urgency}`}>
+                        {c.months <= 0 ? '이번달 만기' : `${c.months}개월`}
                       </span>
                     </div>
                   </div>
