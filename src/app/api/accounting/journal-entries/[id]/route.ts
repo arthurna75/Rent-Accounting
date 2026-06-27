@@ -11,6 +11,8 @@ const LineSchema = z.object({
   debit_amount: z.number().min(0),
   credit_amount: z.number().min(0),
   description: z.string().optional().nullable(),
+  contract_id: z.string().uuid().optional().nullable(),
+  property_id: z.string().uuid().optional().nullable(),
 })
 
 const UpdateSchema = z.object({
@@ -165,6 +167,8 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       debit_amount: l.debit_amount,
       credit_amount: l.credit_amount,
       description: l.description ?? null,
+      contract_id: l.contract_id ?? null,
+      property_id: l.property_id ?? null,
       line_order: idx,
     }))
 
