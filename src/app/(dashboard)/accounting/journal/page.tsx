@@ -7,7 +7,15 @@ import { PlusCircle } from 'lucide-react'
 import { SampleJournal } from '@/components/sample/SampleJournal'
 
 interface PageProps {
-  searchParams: Promise<{ status?: string; from?: string; to?: string; page?: string }>
+  searchParams: Promise<{
+    status?: string
+    from?: string
+    to?: string
+    page?: string
+    q?: string       // 적요 LIKE 검색
+    type?: string    // entry_type 필터
+    account?: string // 계정과목 코드/명 검색 (2-step)
+  }>
 }
 
 export default async function JournalPage({ searchParams }: PageProps) {
@@ -24,10 +32,34 @@ export default async function JournalPage({ searchParams }: PageProps) {
     .eq('organization_id', profile!.organization_id)
   if ((propCount ?? 0) === 0) return <SampleJournal isGuest={false} />
 
-  const page = parseInt(params.page ?? '1')
+  const orgId = profile!.organization_id
+  const page  = parseInt(params.page ?? '1')
   const limit = 30
   const offset = (page - 1) * limit
 
+  // ── 계정과목 2-step 필터 ─────────────────────────────────────
+  let accountEntryIds: string[] | null = null
+  if (params.account?.trim()) {
+    const keyword = params.account.trim()
+    const { data: acctRows } = await supabase
+      .from('chart_of_accounts')
+      .select('id')
+      .eq('organization_id', orgId)
+      .or(`name.ilike.%${keyword}%,code.ilike.%${keyword}%`)
+
+    const acctIds = (acctRows ?? []).map(a => a.id)
+    if (acctIds.length > 0) {
+      const { data: lineRows } = await supabase
+        .from('journal_entry_lines')
+        .select('journal_entry_id')
+        .in('account_id', acctIds)
+      accountEntryIds = [...new Set((lineRows ?? []).map(l => l.journal_entry_id as string))]
+    } else {
+      accountEntryIds = [] // 매칭 계정 없음 → 결과 없음
+    }
+  }
+
+  // ── 메인 쿼리 ─────────────────────────────────────────────────
   let query = supabase
     .from('journal_entries')
     .select(`
@@ -42,13 +74,28 @@ export default async function JournalPage({ searchParams }: PageProps) {
         )
       )
     `, { count: 'exact' })
+    .eq('organization_id', orgId)          // Task 2: 위저드 전표 포함 보장
     .order('entry_date', { ascending: false })
     .order('entry_number', { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (params.status) query = query.eq('status', params.status as JournalEntryStatus)
-  if (params.from) query = query.gte('entry_date', params.from)
-  if (params.to) query = query.lte('entry_date', params.to)
+  // 기존 필터
+  if (params.status)  query = query.eq('status', params.status as JournalEntryStatus)
+  if (params.from)    query = query.gte('entry_date', params.from)
+  if (params.to)      query = query.lte('entry_date', params.to)
+
+  // 신규 필터 (Task 1)
+  if (params.q?.trim())    query = query.ilike('description', `%${params.q.trim()}%`)
+  if (params.type?.trim()) query = query.eq('entry_type', params.type.trim() as import('@/types/database').JournalEntryType)
+
+  if (accountEntryIds !== null) {
+    if (accountEntryIds.length === 0) {
+      // 결과 없도록 강제 (UUID 형식 더미)
+      query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+    } else {
+      query = query.in('id', accountEntryIds)
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawEntries, count } = await query as any
@@ -72,6 +119,11 @@ export default async function JournalPage({ searchParams }: PageProps) {
         totalPages={totalPages}
         total={count ?? 0}
         filterStatus={params.status}
+        filterFrom={params.from}
+        filterTo={params.to}
+        filterQ={params.q}
+        filterType={params.type}
+        filterAccount={params.account}
       />
     </div>
   )

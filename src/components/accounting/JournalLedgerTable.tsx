@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { formatKRW } from '@/lib/utils/format'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { Pencil, Trash2, CheckCircle2, Filter, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, CheckCircle2, Filter, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type EntryStatus = 'draft' | 'posted' | 'reversed'
 type EntryType = string
@@ -37,6 +37,11 @@ interface Props {
   totalPages: number
   total: number
   filterStatus?: string
+  filterFrom?: string
+  filterTo?: string
+  filterQ?: string
+  filterType?: string
+  filterAccount?: string
 }
 
 const STATUS_LABELS: Record<EntryStatus, { label: string; cls: string }> = {
@@ -57,30 +62,55 @@ const TYPE_COLORS: Record<string, string> = {
   일반:      'text-gray-700 bg-gray-100',
 }
 
-// 전표에서 첫 번째 계약의 호수 정보를 추출
+const ENTRY_TYPES = [
+  '일반', '임대수익', '보증금수령', '보증금반환',
+  '감가상각', '간주임대료', '세금', '관리비', '비용지출',
+]
+
+function buildPageRange(current: number, total: number): (number | '...')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const result: (number | '...')[] = [1]
+  if (current - 2 > 2) result.push('...')
+  for (let i = Math.max(2, current - 2); i <= Math.min(total - 1, current + 2); i++) result.push(i)
+  if (current + 2 < total - 1) result.push('...')
+  result.push(total)
+  return result
+}
+
 function getAppliedUnit(entry: JournalEntryRow): string {
   for (const line of entry.lines) {
     if (line.contract?.property) {
       const { building_name, unit_number } = line.contract.property
-      return unit_number
-        ? `${building_name} ${unit_number}`
-        : building_name
+      return unit_number ? `${building_name} ${unit_number}` : building_name
     }
   }
   return ''
 }
 
-export function JournalLedgerTable({ entries, page, totalPages, total, filterStatus }: Props) {
+export function JournalLedgerTable({
+  entries, page, totalPages, total,
+  filterStatus, filterFrom, filterTo, filterQ, filterType, filterAccount,
+}: Props) {
   const router = useRouter()
 
   const [deletingId, setDeletingId]   = useState<string | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
-
-  // 체크박스 선택 상태 (draft 전표만 선택 가능)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkApproving, setBulkApproving] = useState(false)
 
-  const draftEntries = entries.filter(e => e.status === 'draft')
+  // 필터 패널 열림 여부
+  const hasActiveFilter = !!(filterFrom || filterTo || filterQ || filterType || filterAccount || filterStatus)
+  const [showFilter, setShowFilter] = useState(hasActiveFilter)
+
+  // 로컬 필터 상태 (서버 props 기반 초기값)
+  const [localFrom,    setLocalFrom]    = useState(filterFrom    ?? '')
+  const [localTo,      setLocalTo]      = useState(filterTo      ?? '')
+  const [localQ,       setLocalQ]       = useState(filterQ       ?? '')
+  const [localType,    setLocalType]    = useState(filterType    ?? '')
+  const [localStatus,  setLocalStatus]  = useState(filterStatus  ?? '')
+  const [localAccount, setLocalAccount] = useState(filterAccount ?? '')
+
+  const draftEntries     = entries.filter(e => e.status === 'draft')
   const allDraftSelected = draftEntries.length > 0 && draftEntries.every(e => selectedIds.has(e.id))
 
   function toggleSelect(id: string) {
@@ -92,27 +122,96 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
   }
 
   function toggleSelectAll() {
-    setSelectedIds(allDraftSelected
-      ? new Set()
-      : new Set(draftEntries.map(e => e.id))
-    )
+    setSelectedIds(allDraftSelected ? new Set() : new Set(draftEntries.map(e => e.id)))
   }
 
-  // 임시만 보기 토글 — URL 파라미터로 서버 필터
-  function toggleDraftFilter() {
+  // URL 생성 (모든 필터 파라미터 보존)
+  function buildUrl(opts: { status?: string; from?: string; to?: string; q?: string; type?: string; account?: string; page?: number } = {}) {
     const q = new URLSearchParams()
-    if (filterStatus !== 'draft') q.set('status', 'draft')
+    const s   = opts.status  !== undefined ? opts.status  : localStatus
+    const frm = opts.from    !== undefined ? opts.from    : localFrom
+    const to  = opts.to      !== undefined ? opts.to      : localTo
+    const sq  = opts.q       !== undefined ? opts.q       : localQ
+    const typ = opts.type    !== undefined ? opts.type    : localType
+    const acc = opts.account !== undefined ? opts.account : localAccount
+    const pg  = opts.page    !== undefined ? opts.page    : 1
+
+    if (s)   q.set('status',  s)
+    if (frm) q.set('from',    frm)
+    if (to)  q.set('to',      to)
+    if (sq)  q.set('q',       sq)
+    if (typ) q.set('type',    typ)
+    if (acc) q.set('account', acc)
+    q.set('page', String(pg))
+    return `?${q.toString()}`
+  }
+
+  function handleSearch() {
+    setSelectedIds(new Set())
+    router.push(buildUrl())
+  }
+
+  function handleReset() {
+    setLocalFrom(''); setLocalTo(''); setLocalQ('')
+    setLocalType(''); setLocalStatus(''); setLocalAccount('')
+    setSelectedIds(new Set())
+    router.push('?page=1')
+  }
+
+  // 임시만 보기 퀵 토글
+  function toggleDraftFilter() {
+    const next = filterStatus !== 'draft' ? 'draft' : ''
+    setLocalStatus(next)
+    setSelectedIds(new Set())
+    router.push(buildUrl({ status: next }))
+  }
+
+  function pageHref(p: number) {
+    return buildUrl({
+      status: filterStatus, from: filterFrom, to: filterTo,
+      q: filterQ, type: filterType, account: filterAccount, page: p,
+    })
+  }
+
+  function setQuickDate(kind: 'thisMonth' | 'lastMonth' | 'thisYear') {
+    const now = new Date()
+    let from: string, to: string
+    if (kind === 'thisMonth') {
+      const y = now.getFullYear(), m = now.getMonth()
+      from = `${y}-${String(m + 1).padStart(2, '0')}-01`
+      const last = new Date(y, m + 1, 0)
+      to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+    } else if (kind === 'lastMonth') {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      from = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-01`
+      const last = new Date(now.getFullYear(), now.getMonth(), 0)
+      to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+    } else {
+      from = `${now.getFullYear()}-01-01`
+      to   = `${now.getFullYear()}-12-31`
+    }
+    setLocalFrom(from)
+    setLocalTo(to)
+    setSelectedIds(new Set())
+    router.push(buildUrl({ from, to, page: 1 }))
+  }
+
+  function removeFilter(key: 'type' | 'q' | 'account' | 'dates' | 'status') {
+    if (key === 'type')   setLocalType('')
+    if (key === 'q')      setLocalQ('')
+    if (key === 'account') setLocalAccount('')
+    if (key === 'dates')  { setLocalFrom(''); setLocalTo('') }
+    if (key === 'status') setLocalStatus('')
+    setSelectedIds(new Set())
+    const q = new URLSearchParams()
+    if (filterStatus  && key !== 'status') q.set('status',  filterStatus)
+    if (filterFrom    && key !== 'dates')  q.set('from',    filterFrom)
+    if (filterTo      && key !== 'dates')  q.set('to',      filterTo)
+    if (filterQ       && key !== 'q')      q.set('q',       filterQ)
+    if (filterType    && key !== 'type')   q.set('type',    filterType)
+    if (filterAccount && key !== 'account') q.set('account', filterAccount)
     q.set('page', '1')
     router.push(`?${q.toString()}`)
-    setSelectedIds(new Set())
-  }
-
-  // 페이지 링크 URL (status 필터 유지)
-  function pageHref(p: number) {
-    const q = new URLSearchParams()
-    if (filterStatus) q.set('status', filterStatus)
-    q.set('page', String(p))
-    return `?${q.toString()}`
   }
 
   async function handleApprove(id: string) {
@@ -176,31 +275,205 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
     }
   }
 
-  const isDraftFilter = filterStatus === 'draft'
+  const isDraftFilter    = filterStatus === 'draft'
+  const activeFilterCount = [filterFrom, filterTo, filterQ, filterType, filterAccount, filterStatus].filter(Boolean).length
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
 
+      {/* ── 필터 패널 ──────────────────────────────── */}
+      {showFilter && (
+        <div className="border-b border-gray-200 bg-gray-50/70 px-4 py-3 space-y-3">
+          {/* 거래일 + 유형 + 상태 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1 min-w-0">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 (시작)</label>
+              <input
+                type="date"
+                value={localFrom}
+                onChange={e => setLocalFrom(e.target.value)}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <span className="text-gray-400 text-sm pb-1.5">~</span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 (종료)</label>
+              <input
+                type="date"
+                value={localTo}
+                onChange={e => setLocalTo(e.target.value)}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            {/* 날짜 퀵 선택 */}
+            <div className="flex items-end gap-1.5 pb-0.5">
+              {(['thisMonth', 'lastMonth', 'thisYear'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setQuickDate(kind)}
+                  className="h-8 px-2.5 text-xs rounded-md border border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors font-medium whitespace-nowrap"
+                >
+                  {kind === 'thisMonth' ? '이번 달' : kind === 'lastMonth' ? '지난 달' : '올해'}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">유형</label>
+              <select
+                value={localType}
+                onChange={e => setLocalType(e.target.value)}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">전체</option>
+                {ENTRY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">상태</label>
+              <select
+                value={localStatus}
+                onChange={e => setLocalStatus(e.target.value)}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">전체</option>
+                <option value="draft">임시</option>
+                <option value="posted">승인</option>
+                <option value="reversed">역분개</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 적요 + 계정과목 */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">적요 (LIKE 검색)</label>
+              <input
+                type="text"
+                placeholder="적요에 포함된 단어..."
+                value={localQ}
+                onChange={e => setLocalQ(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">계정과목 (코드·명)</label>
+              <input
+                type="text"
+                placeholder="예: 102, 임대보증금..."
+                value={localAccount}
+                onChange={e => setLocalAccount(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button onClick={handleSearch} size="sm" className="h-8 text-xs">조회</Button>
+              <Button onClick={handleReset} size="sm" variant="outline" className="h-8 text-xs">초기화</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 툴바 ───────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-gray-100 bg-gray-50/60">
-        {/* 임시만 보기 토글 */}
-        <button
-          onClick={toggleDraftFilter}
-          className={cn(
-            'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors font-medium',
-            isDraftFilter
-              ? 'bg-amber-50 border-amber-300 text-amber-700'
-              : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700',
+        <div className="flex items-center gap-2">
+          {/* 필터 패널 토글 */}
+          <button
+            onClick={() => setShowFilter(v => !v)}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors font-medium',
+              showFilter
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700',
+            )}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            필터
+            {activeFilterCount > 0 && (
+              <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {/* 임시만 보기 퀵 토글 */}
+          <button
+            onClick={toggleDraftFilter}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors font-medium',
+              isDraftFilter
+                ? 'bg-amber-50 border-amber-300 text-amber-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700',
+            )}
+          >
+            임시만 보기
+            {isDraftFilter && (
+              <span className="bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                {total}
+              </span>
+            )}
+          </button>
+
+          {/* 활성 필터 태그 표시 */}
+          {hasActiveFilter && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {filterStatus && filterStatus !== 'draft' && (
+                <button
+                  onClick={() => removeFilter('status')}
+                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
+                >
+                  상태: {filterStatus === 'posted' ? '승인' : '역분개'}
+                  <X className="w-2.5 h-2.5 ml-0.5" />
+                </button>
+              )}
+              {filterType && (
+                <button
+                  onClick={() => removeFilter('type')}
+                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
+                >
+                  유형: {filterType}
+                  <X className="w-2.5 h-2.5 ml-0.5" />
+                </button>
+              )}
+              {filterQ && (
+                <button
+                  onClick={() => removeFilter('q')}
+                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
+                >
+                  적요: {filterQ}
+                  <X className="w-2.5 h-2.5 ml-0.5" />
+                </button>
+              )}
+              {filterAccount && (
+                <button
+                  onClick={() => removeFilter('account')}
+                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
+                >
+                  계정: {filterAccount}
+                  <X className="w-2.5 h-2.5 ml-0.5" />
+                </button>
+              )}
+              {(filterFrom || filterTo) && (
+                <button
+                  onClick={() => removeFilter('dates')}
+                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
+                >
+                  {filterFrom ?? '~'} ~ {filterTo ?? '~'}
+                  <X className="w-2.5 h-2.5 ml-0.5" />
+                </button>
+              )}
+              <button
+                onClick={handleReset}
+                className="text-[11px] text-gray-400 hover:text-red-500 flex items-center gap-0.5"
+              >
+                <X className="w-3 h-3" /> 전체 해제
+              </button>
+            </div>
           )}
-        >
-          <Filter className="w-3.5 h-3.5" />
-          임시만 보기
-          {isDraftFilter && draftEntries.length > 0 && (
-            <span className="ml-0.5 bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
-              {total}
-            </span>
-          )}
-        </button>
+        </div>
 
         {/* 일괄 승인 영역 */}
         {selectedIds.size > 0 && (
@@ -234,7 +507,6 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {/* 체크박스 헤더 */}
               <th className="px-2 py-3 w-8">
                 {draftEntries.length > 0 && (
                   <input
@@ -261,7 +533,9 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
             {entries.length === 0 && (
               <tr>
                 <td colSpan={10} className="text-center py-12 text-gray-400">
-                  {isDraftFilter ? '임시 전표가 없습니다.' : '전표가 없습니다.'}
+                  {hasActiveFilter
+                    ? '조회 조건에 맞는 전표가 없습니다.'
+                    : isDraftFilter ? '임시 전표가 없습니다.' : '전표가 없습니다.'}
                 </td>
               </tr>
             )}
@@ -284,7 +558,6 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
                     isSelected && 'bg-amber-50/40',
                   )}
                 >
-                  {/* 체크박스 */}
                   <td className="px-2 py-3">
                     {isDraft ? (
                       <input
@@ -298,24 +571,20 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
                     )}
                   </td>
 
-                  {/* 전표번호 */}
                   <td className="px-3 py-3 hidden lg:table-cell">
                     <span className="font-mono text-xs text-gray-600">{entry.entry_number}</span>
                   </td>
 
-                  {/* 거래일 */}
                   <td className="px-3 py-3 text-xs text-gray-600 tabular-nums whitespace-nowrap">
                     {entry.entry_date}
                   </td>
 
-                  {/* 적요 */}
                   <td className="px-3 py-3 text-gray-800 max-w-[100px] sm:max-w-[160px] xl:max-w-[200px] truncate">
                     <Link href={`/accounting/journal/${entry.id}`} className="hover:text-blue-600 hover:underline">
                       {entry.description}
                     </Link>
                   </td>
 
-                  {/* 적용호수 */}
                   <td className="px-3 py-3 hidden xl:table-cell">
                     {appliedUnit
                       ? <span className="text-xs text-gray-700 whitespace-nowrap">{appliedUnit}</span>
@@ -323,7 +592,6 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
                     }
                   </td>
 
-                  {/* 지급처 */}
                   <td className="px-3 py-3 hidden xl:table-cell">
                     {entry.vendor
                       ? <span className="text-xs text-gray-700 truncate max-w-[80px] block">{entry.vendor.name}</span>
@@ -331,7 +599,6 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
                     }
                   </td>
 
-                  {/* 유형 · 상태 (좌우 배치) */}
                   <td className="px-3 py-3 hidden sm:table-cell">
                     <div className="flex items-center gap-1.5 flex-nowrap">
                       <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap', typeColor)}>
@@ -343,17 +610,14 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
                     </div>
                   </td>
 
-                  {/* 차변 */}
                   <td className="px-3 py-3 text-right tabular-nums text-xs text-gray-800">
                     {formatKRW(totalDebit)}
                   </td>
 
-                  {/* 대변 */}
                   <td className="px-3 py-3 text-right tabular-nums text-xs text-gray-800 hidden sm:table-cell">
                     {formatKRW(totalCredit)}
                   </td>
 
-                  {/* 관리 */}
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-center gap-0.5">
                       {isDraft && (
@@ -403,22 +667,58 @@ export function JournalLedgerTable({ entries, page, totalPages, total, filterSta
       {/* ── 페이지네이션 ────────────────────────────── */}
       <div className="flex items-center justify-between px-3 py-3 border-t border-gray-100 bg-gray-50">
         <p className="text-xs text-gray-500">총 {total.toLocaleString()}건</p>
-        <div className="flex gap-1">
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(p => (
-            <Link
-              key={p}
-              href={pageHref(p)}
-              className={cn(
-                'w-7 h-7 flex items-center justify-center rounded text-xs font-medium',
-                p === page
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100',
-              )}
-            >
-              {p}
-            </Link>
-          ))}
-        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            {/* 이전 버튼 */}
+            {page > 1 ? (
+              <Link
+                href={pageHref(page - 1)}
+                className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Link>
+            ) : (
+              <span className="w-7 h-7 flex items-center justify-center rounded text-gray-300 cursor-default">
+                <ChevronLeft className="w-4 h-4" />
+              </span>
+            )}
+
+            {buildPageRange(page, totalPages).map((p, idx) =>
+              p === '...' ? (
+                <span key={`ellipsis-${idx}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">
+                  …
+                </span>
+              ) : (
+                <Link
+                  key={p}
+                  href={pageHref(p)}
+                  className={cn(
+                    'w-7 h-7 flex items-center justify-center rounded text-xs font-medium',
+                    p === page
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100',
+                  )}
+                >
+                  {p}
+                </Link>
+              )
+            )}
+
+            {/* 다음 버튼 */}
+            {page < totalPages ? (
+              <Link
+                href={pageHref(page + 1)}
+                className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <span className="w-7 h-7 flex items-center justify-center rounded text-gray-300 cursor-default">
+                <ChevronRight className="w-4 h-4" />
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
