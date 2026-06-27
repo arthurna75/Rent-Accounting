@@ -51,23 +51,36 @@ async function getYearlyIncomeData(organizationId: string, year: number) {
   return { yearTotal, quarterly }
 }
 
-// ── 연간 총비용 (journal_entries 기준) ──────────────────────────
+// ── 연간 총비용 (account_type='비용' 기준, pl-stats 동일 방식) ──
 async function getYearlyExpense(organizationId: string, year: number) {
   const supabase = await createClient()
 
+  // 1단계: 해당 연도 posted 전표 ID 수집
   const { data: entries } = await supabase
     .from('journal_entries')
-    .select('lines:journal_entry_lines(debit_amount)')
+    .select('id')
     .eq('organization_id', organizationId)
-    .eq('entry_type', '비용지출')
     .eq('status', 'posted')
     .gte('entry_date', `${year}-01-01`)
     .lte('entry_date', `${year}-12-31`)
 
-  return (entries ?? []).reduce((total, entry) => {
-    const lineSum = ((entry.lines ?? []) as { debit_amount: number }[])
-      .reduce((s, l) => s + l.debit_amount, 0)
-    return total + lineSum
+  if (!entries || entries.length === 0) return 0
+
+  const ids = entries.map(e => e.id)
+
+  // 2단계: 비용 계정과목 라인만 순액 합산
+  const { data: lines } = await supabase
+    .from('journal_entry_lines')
+    .select('debit_amount, credit_amount, account:chart_of_accounts!account_id(account_type, normal_balance)')
+    .in('journal_entry_id', ids)
+
+  return (lines ?? []).reduce((total, line) => {
+    const acct = (line.account as unknown) as { account_type: string; normal_balance: string } | null
+    if (!acct || acct.account_type !== '비용') return total
+    const net = acct.normal_balance === '차변'
+      ? line.debit_amount - line.credit_amount
+      : line.credit_amount - line.debit_amount
+    return total + Math.max(0, net)
   }, 0)
 }
 
