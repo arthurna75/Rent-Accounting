@@ -140,17 +140,12 @@ function QuarterlyTable({ data }: { data: PLStatsData }) {
   )
 }
 
-function MonthlyView({ data, month }: { data: PLStatsData; month: number }) {
-  const mi = month - 1
-  const revenues = data.revenues
-    .map(r => ({ name: r.name, amount: r.months[mi] }))
-    .filter(r => r.amount !== 0)
-  const expenses = data.expenses
-    .map(e => ({ name: e.name, amount: e.months[mi] }))
-    .filter(e => e.amount !== 0)
-  const totalRevenue = data.revenue_by_month[mi]
-  const totalExpense = data.expense_by_month[mi]
-  const netIncome = data.net_income_by_month[mi]
+function AnnualView({ data }: { data: PLStatsData }) {
+  const revenues = data.revenues.filter(r => r.total !== 0)
+  const expenses = data.expenses.filter(e => e.total !== 0)
+  const totalRevenue = data.total_revenue
+  const totalExpense = data.total_expense
+  const netIncome = data.total_net_income
   const positive = netIncome >= 0
 
   return (
@@ -160,11 +155,11 @@ function MonthlyView({ data, month }: { data: PLStatsData; month: number }) {
           <span className="text-xs font-semibold text-blue-800">수익</span>
         </div>
         {revenues.length === 0
-          ? <p className="text-xs text-gray-400 px-4 py-3">해당 월 수익 내역이 없습니다.</p>
+          ? <p className="text-xs text-gray-400 px-4 py-3">수익 내역이 없습니다.</p>
           : revenues.map(r => (
-            <div key={r.name} className="flex justify-between px-4 py-2 text-sm border-b border-gray-50 last:border-0">
+            <div key={r.code} className="flex justify-between px-4 py-2 text-sm border-b border-gray-50 last:border-0">
               <span className="text-gray-600 ml-2">{r.name}</span>
-              <span className="tabular-nums text-gray-900">{r.amount.toLocaleString('ko-KR')}</span>
+              <span className="tabular-nums text-gray-900">{r.total.toLocaleString('ko-KR')}</span>
             </div>
           ))
         }
@@ -179,11 +174,11 @@ function MonthlyView({ data, month }: { data: PLStatsData; month: number }) {
           <span className="text-xs font-semibold text-red-800">비용</span>
         </div>
         {expenses.length === 0
-          ? <p className="text-xs text-gray-400 px-4 py-3">해당 월 비용 내역이 없습니다.</p>
+          ? <p className="text-xs text-gray-400 px-4 py-3">비용 내역이 없습니다.</p>
           : expenses.map(e => (
-            <div key={e.name} className="flex justify-between px-4 py-2 text-sm border-b border-gray-50 last:border-0">
+            <div key={e.code} className="flex justify-between px-4 py-2 text-sm border-b border-gray-50 last:border-0">
               <span className="text-gray-600 ml-2">{e.name}</span>
-              <span className="tabular-nums text-gray-900">{e.amount.toLocaleString('ko-KR')}</span>
+              <span className="tabular-nums text-gray-900">{e.total.toLocaleString('ko-KR')}</span>
             </div>
           ))
         }
@@ -216,9 +211,8 @@ interface Props {
 }
 
 export function IncomeStatementClient({ currentYear }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>('연')
+  const [viewMode, setViewMode] = useState<ViewMode>('월')
   const [year, setYear] = useState(currentYear)
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [data, setData] = useState<PLStatsData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -248,7 +242,7 @@ export function IncomeStatementClient({ currentYear }: Props) {
     fetchData(y)
   }
 
-  const VIEW_MODES: ViewMode[] = ['연', '분기', '월']
+  const VIEW_MODES: ViewMode[] = ['월', '분기', '연']
 
   return (
     <div className="space-y-5">
@@ -284,28 +278,12 @@ export function IncomeStatementClient({ currentYear }: Props) {
           </select>
         </div>
 
-        {/* 월 선택 (월 모드에서만 표시) */}
-        {viewMode === '월' && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-600">월</label>
-            <select
-              value={month}
-              onChange={e => setMonth(Number(e.target.value))}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                <option key={m} value={m}>{m}월</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         <Button onClick={() => fetchData(year)} disabled={loading} size="sm">
           {loading ? '조회 중...' : '조회'}
         </Button>
 
         {data && !loading && <PrintButton />}
-        {viewMode === '연' && data && !loading && (
+        {viewMode === '월' && data && !loading && (
           <span className="text-xs text-gray-400">수익·비용 행을 클릭하면 항목을 접거나 펼칠 수 있습니다.</span>
         )}
       </div>
@@ -325,9 +303,9 @@ export function IncomeStatementClient({ currentYear }: Props) {
           </div>
         ) : (
           <>
-            {viewMode === '연'   && <PLStatsTable data={data} />}
+            {viewMode === '월'   && <PLStatsTable data={data} />}
             {viewMode === '분기' && <QuarterlyTable data={data} />}
-            {viewMode === '월'   && <MonthlyView data={data} month={month} />}
+            {viewMode === '연'   && <AnnualView data={data} />}
           </>
         )
       )}
