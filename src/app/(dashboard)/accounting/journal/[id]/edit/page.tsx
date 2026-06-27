@@ -180,8 +180,13 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
       setNtsApprovalNumber(entry.nts_approval_number ?? '')
       setNtsVerified(entry.nts_verified ?? false)
 
-      const entryLines: JournalLine[] = (entry.lines ?? [])
-        .sort((a: { line_order: number }, b: { line_order: number }) => a.line_order - b.line_order)
+      const sortedLines = [...(entry.lines ?? [])].sort(
+        (a: { line_order: number }, b: { line_order: number }) => a.line_order - b.line_order,
+      )
+      const firstContractId = (sortedLines as { contract_id?: string }[]).find(l => l.contract_id)?.contract_id ?? ''
+      setContractId(firstContractId)
+
+      const entryLines: JournalLine[] = sortedLines
         .map((l: { debit_amount: number; credit_amount: number; account?: { code: string; name: string } | null }) => ({
           side: l.debit_amount > 0 ? 'debit' : 'credit',
           account_code: l.account?.code ?? '',
