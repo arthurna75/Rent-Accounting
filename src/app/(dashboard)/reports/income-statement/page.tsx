@@ -13,7 +13,7 @@ export default async function IncomeStatementPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">손익계산서</h2>
-        <p className="text-sm text-gray-500 mt-1">일정 기간 동안의 수익과 비용, 영업이익을 나타냅니다.</p>
+        <p className="text-sm text-gray-500 mt-1">월·분기·연 단위로 수익과 비용, 영업이익을 조회합니다.</p>
       </div>
       <IncomeStatementClient currentYear={currentYear} />
     </div>

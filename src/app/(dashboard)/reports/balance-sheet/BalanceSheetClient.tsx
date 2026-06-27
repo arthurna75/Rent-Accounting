@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PrintButton } from '@/components/ui/PrintButton'
@@ -79,6 +79,9 @@ export function BalanceSheetClient({ defaultDate }: Props) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<BalanceSheetData | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { handleFetch() }, [])
 
   async function handleFetch() {
     setLoading(true)
