@@ -12,9 +12,10 @@ interface PageProps {
     from?: string
     to?: string
     page?: string
-    q?: string       // 적요 LIKE 검색
-    type?: string    // entry_type 필터
-    account?: string // 계정과목 코드/명 검색 (2-step)
+    q?: string          // 적요 LIKE 검색
+    type?: string       // entry_type 필터
+    account?: string    // 계정과목 코드/명 검색 (2-step)
+    unverified?: string // '1' = 증빙 미확인만 (세금계산서·현금영수증 && nts_verified=false)
   }>
 }
 
@@ -36,6 +37,7 @@ export default async function JournalPage({ searchParams }: PageProps) {
   const page  = parseInt(params.page ?? '1')
   const limit = 30
   const offset = (page - 1) * limit
+  const unverifiedOnly = params.unverified === '1'
 
   // ── 계정과목 2-step 필터 ─────────────────────────────────────
   let accountEntryIds: string[] | null = null
@@ -64,6 +66,7 @@ export default async function JournalPage({ searchParams }: PageProps) {
     .from('journal_entries')
     .select(`
       id, entry_number, entry_date, description, entry_type, status,
+      evidence_type, nts_verified,
       vendor:vendors!vendor_id (name),
       lines:journal_entry_lines (
         debit_amount, credit_amount,
@@ -97,6 +100,11 @@ export default async function JournalPage({ searchParams }: PageProps) {
     }
   }
 
+  // 증빙 미확인 필터: 세금계산서·현금영수증이고 nts_verified=false인 항목만
+  if (unverifiedOnly) {
+    query = query.in('evidence_type', ['세금계산서', '현금영수증']).eq('nts_verified', false)
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawEntries, count } = await query as any
   const totalPages = Math.ceil((count ?? 0) / limit)
@@ -124,6 +132,7 @@ export default async function JournalPage({ searchParams }: PageProps) {
         filterQ={params.q}
         filterType={params.type}
         filterAccount={params.account}
+        filterUnverifiedOnly={unverifiedOnly}
       />
     </div>
   )

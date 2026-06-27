@@ -20,6 +20,7 @@ const UpdateSchema = z.object({
   entry_type: z.enum(['일반','임대수익','보증금수령','보증금반환','감가상각','간주임대료','세금','관리비','비용지출']),
   vendor_id: z.string().uuid().optional().nullable(),
   evidence_type: z.enum(['현금영수증','세금계산서','영수증','기타','사업자용 카드']).optional().nullable(),
+  nts_approval_number: z.string().optional().nullable(),
   attachment_urls: z.array(z.string()).optional().nullable(),
   lines: z.array(LineSchema).min(2),
 })
@@ -131,6 +132,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     }
 
     // 헤더 업데이트
+    const hasApprovalNum = 'nts_approval_number' in parsed.data
     const { error: updateErr } = await supabase
       .from('journal_entries')
       .update({
@@ -140,6 +142,13 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
         vendor_id: parsed.data.vendor_id ?? null,
         evidence_type: parsed.data.evidence_type ?? null,
         attachment_urls: parsed.data.attachment_urls ?? null,
+        // 승인번호가 전달된 경우 검증 상태도 초기화
+        ...(hasApprovalNum && {
+          nts_approval_number: parsed.data.nts_approval_number ?? null,
+          nts_verified: false,
+          nts_verified_at: null,
+          nts_verification_result: null,
+        }),
       })
       .eq('id', id)
 

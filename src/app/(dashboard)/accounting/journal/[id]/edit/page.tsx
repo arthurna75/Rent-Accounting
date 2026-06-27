@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Plus, Trash2, CheckCircle2, AlertTriangle, Paperclip, X, FileText, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, CheckCircle2, AlertTriangle, Paperclip, X, FileText, Loader2, ShieldCheck, ShieldAlert, ShieldQuestion } from 'lucide-react'
 import Link from 'next/link'
 import type { EvidenceType, JournalEntryType, Vendor } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
@@ -110,6 +110,10 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
   const [submitting, setSubmitting]       = useState(false)
   const [error, setError]                 = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [ntsApprovalNumber, setNtsApprovalNumber] = useState('')
+  const [ntsVerified, setNtsVerified]     = useState(false)
+  const [ntsVerifying, setNtsVerifying]   = useState(false)
+  const [ntsResult, setNtsResult]         = useState<{ verified: boolean; message: string; hometax_url?: string } | null>(null)
 
   // 분개유형별 허용 계정 필터
   const allowedAccounts = useMemo(() => {
@@ -173,6 +177,8 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
       setVendorId(entry.vendor_id ?? '')
       setEvidenceType(entry.evidence_type ?? '')
       setAttachmentUrls(Array.isArray(entry.attachment_urls) ? entry.attachment_urls : [])
+      setNtsApprovalNumber(entry.nts_approval_number ?? '')
+      setNtsVerified(entry.nts_verified ?? false)
 
       const entryLines: JournalLine[] = (entry.lines ?? [])
         .sort((a: { line_order: number }, b: { line_order: number }) => a.line_order - b.line_order)
@@ -255,6 +261,30 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
     setAttachmentUrls(prev => prev.filter(u => u !== url))
   }
 
+  async function handleNtsVerify() {
+    if (!ntsApprovalNumber.trim()) return
+    setNtsVerifying(true)
+    setNtsResult(null)
+    try {
+      const res = await fetch('/api/nts/verify-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journal_entry_id: id, approval_number: ntsApprovalNumber.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setNtsResult({ verified: false, message: json.error ?? '확인 실패' })
+      } else {
+        setNtsResult(json)
+        setNtsVerified(json.verified)
+      }
+    } catch {
+      setNtsResult({ verified: false, message: '네트워크 오류가 발생했습니다.' })
+    } finally {
+      setNtsVerifying(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -288,6 +318,7 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
           description: description.trim(),
           vendor_id: vendorId || null,
           evidence_type: evidenceType || null,
+          nts_approval_number: ntsApprovalNumber.trim() || null,
           attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
           lines: filled.map(l => ({
             account_code:  l.account_code.trim(),
@@ -414,7 +445,16 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
               </div>
               <div className="space-y-1.5">
                 <Label>증빙</Label>
-                <Select value={evidenceType} onValueChange={v => setEvidenceType(v as EvidenceType | '')}>
+                <Select
+                  value={evidenceType}
+                  onValueChange={v => {
+                    setEvidenceType(v as EvidenceType | '')
+                    if (v !== '세금계산서' && v !== '현금영수증') {
+                      setNtsApprovalNumber('')
+                      setNtsResult(null)
+                    }
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="증빙 선택 (선택)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">없음</SelectItem>
@@ -426,6 +466,81 @@ export default function EditJournalEntryPage({ params }: { params: Promise<{ id:
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* 국세청 승인번호 확인 (세금계산서·현금영수증) */}
+              {(evidenceType === '세금계산서' || evidenceType === '현금영수증') && (
+                <div className="col-span-2 space-y-2">
+                  <Label>
+                    {evidenceType === '세금계산서' ? '세금계산서 승인번호' : '현금영수증 승인번호'}
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">
+                      {evidenceType === '세금계산서' ? '(24자리)' : '(8~12자리)'}
+                    </span>
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={ntsApprovalNumber}
+                      onChange={e => {
+                        setNtsApprovalNumber(e.target.value.replace(/\D/g, ''))
+                        setNtsResult(null)
+                      }}
+                      placeholder={evidenceType === '세금계산서' ? '000000000000000000000000' : '승인번호 입력'}
+                      maxLength={evidenceType === '세금계산서' ? 24 : 12}
+                      className="font-mono tracking-widest"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5 whitespace-nowrap"
+                      disabled={!ntsApprovalNumber.trim() || ntsVerifying}
+                      onClick={handleNtsVerify}
+                    >
+                      {ntsVerifying
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <ShieldQuestion className="w-3.5 h-3.5" />
+                      }
+                      국세청 확인
+                    </Button>
+                  </div>
+
+                  {/* 기존 검증 상태 */}
+                  {!ntsResult && ntsApprovalNumber && ntsVerified && (
+                    <div className="flex items-center gap-1.5 text-xs text-green-700">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      국세청 확인 완료
+                    </div>
+                  )}
+
+                  {/* 실시간 확인 결과 */}
+                  {ntsResult && (
+                    <div className={cn(
+                      'flex items-start gap-2 rounded-md px-3 py-2 text-xs border',
+                      ntsResult.verified
+                        ? 'bg-green-50 border-green-200 text-green-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800',
+                    )}>
+                      {ntsResult.verified
+                        ? <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        : <ShieldAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      }
+                      <div>
+                        <span>{ntsResult.message}</span>
+                        {ntsResult.hometax_url && (
+                          <a
+                            href={ntsResult.hometax_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mt-1 underline text-blue-600"
+                          >
+                            홈택스에서 직접 확인 →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </CardContent>
         </Card>

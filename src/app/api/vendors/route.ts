@@ -36,7 +36,29 @@ export async function GET(_req: NextRequest) {
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data })
+
+  // 거래처별 증빙 미확인 건수 집계
+  const { data: unverifiedRows } = await supabase
+    .from('journal_entries')
+    .select('vendor_id')
+    .eq('organization_id', profile.organization_id)
+    .not('vendor_id', 'is', null)
+    .in('evidence_type', ['현금영수증', '세금계산서'])
+    .eq('nts_verified', false)
+
+  const unverifiedMap: Record<string, number> = {}
+  for (const row of unverifiedRows ?? []) {
+    if (row.vendor_id) {
+      unverifiedMap[row.vendor_id] = (unverifiedMap[row.vendor_id] ?? 0) + 1
+    }
+  }
+
+  const enriched = (data ?? []).map(v => ({
+    ...v,
+    unverified_evidence_count: unverifiedMap[v.id] ?? 0,
+  }))
+
+  return NextResponse.json({ data: enriched })
 }
 
 export async function POST(req: NextRequest) {

@@ -147,6 +147,7 @@ function NewJournalEntryPageInner() {
   const [description, setDescription] = useState('')
   const [vendorId, setVendorId]       = useState<string>(initVendorId)
   const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>('')
+  const [ntsApprovalNumber, setNtsApprovalNumber] = useState('')
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>([])
   const [contractId, setContractId]   = useState<string>(initContractId)
   const [uploading, setUploading]     = useState(false)
@@ -359,12 +360,13 @@ function NewJournalEntryPageInner() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entry_date:      entryDate,
-          entry_type:      entryType,
-          description:     description.trim(),
-          vendor_id:       vendorId || null,
-          evidence_type:   evidenceType || null,
-          attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
+          entry_date:          entryDate,
+          entry_type:          entryType,
+          description:         description.trim(),
+          vendor_id:           vendorId || null,
+          evidence_type:       evidenceType || null,
+          nts_approval_number: ntsApprovalNumber.trim() || null,
+          attachment_urls:     attachmentUrls.length > 0 ? attachmentUrls : null,
           lines: filled.map(l => ({
             account_code:  l.account_code.trim(),
             debit_amount:  l.side === 'debit'  ? parseAmt(l.amount) : 0,
@@ -560,7 +562,13 @@ function NewJournalEntryPageInner() {
               {/* 증빙 */}
               <div className="space-y-1.5">
                 <Label>증빙</Label>
-                <Select value={evidenceType} onValueChange={v => setEvidenceType(v as EvidenceType | '')}>
+                <Select
+                  value={evidenceType}
+                  onValueChange={v => {
+                    setEvidenceType(v as EvidenceType | '')
+                    if (v !== '세금계산서' && v !== '현금영수증') setNtsApprovalNumber('')
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="증빙 선택 (선택)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">없음</SelectItem>
@@ -572,6 +580,30 @@ function NewJournalEntryPageInner() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* 국세청 승인번호 (세금계산서·현금영수증 선택 시) */}
+              {(evidenceType === '세금계산서' || evidenceType === '현금영수증') && (
+                <div className="col-span-2 space-y-1.5">
+                  <Label>
+                    {evidenceType === '세금계산서' ? '세금계산서 승인번호' : '현금영수증 승인번호'}
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">
+                      {evidenceType === '세금계산서' ? '(24자리, 선택)' : '(8~12자리, 선택)'}
+                    </span>
+                  </Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      value={ntsApprovalNumber}
+                      onChange={e => setNtsApprovalNumber(e.target.value.replace(/\D/g, ''))}
+                      placeholder={evidenceType === '세금계산서' ? '000000000000000000000000' : '승인번호 입력'}
+                      maxLength={evidenceType === '세금계산서' ? 24 : 12}
+                      className="font-mono tracking-widest"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    저장 후 분개 목록 또는 거래처 상세에서 국세청 발행 여부를 확인할 수 있습니다.
+                  </p>
+                </div>
+              )}
 
             </div>
           </CardContent>

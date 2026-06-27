@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table'
 import {
   Plus, Store, Pencil, Trash2, CheckCircle2, XCircle, Loader2,
-  LayoutGrid, List, BookOpen, ExternalLink,
+  LayoutGrid, List, BookOpen, ExternalLink, ShieldCheck, ShieldAlert, ShieldQuestion,
 } from 'lucide-react'
 import type { Vendor } from '@/types/database'
 
@@ -141,11 +141,20 @@ interface JournalSummary {
   description: string
   entry_type: string
   status: string
+  evidence_type?: string | null
+  nts_approval_number?: string | null
+  nts_verified?: boolean
   lines?: {
     debit_amount: number
     credit_amount: number
     account?: { code: string; name: string } | null
   }[]
+}
+
+interface NtsVerifyResult {
+  verified: boolean
+  message: string
+  hometax_url?: string
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────
@@ -157,6 +166,8 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
   const [vendorJournals, setVendorJournals] = useState<JournalSummary[]>([])
   const [journalsLoading, setJournalsLoading] = useState(false)
+  const [ntsVerifyingId, setNtsVerifyingId] = useState<string | null>(null)
+  const [ntsResults, setNtsResults] = useState<Record<string, NtsVerifyResult>>({})
 
   // 등록/수정 폼
   const [showForm, setShowForm] = useState(false)
@@ -185,6 +196,7 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
   async function selectVendor(v: Vendor) {
     setSelectedVendor(v)
     setVendorJournals([])
+    setNtsResults({})
     setJournalsLoading(true)
     try {
       const res = await fetch(`/api/accounting/journal-entries?vendor_id=${v.id}&limit=20`)
@@ -195,7 +207,31 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
     }
   }
 
-  function closeDetail() { setSelectedVendor(null); setVendorJournals([]) }
+  function closeDetail() { setSelectedVendor(null); setVendorJournals([]); setNtsResults({}) }
+
+  async function handleNtsVerify(je: JournalSummary) {
+    if (!je.nts_approval_number) return
+    setNtsVerifyingId(je.id)
+    try {
+      const res = await fetch('/api/nts/verify-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journal_entry_id: je.id, approval_number: je.nts_approval_number }),
+      })
+      const json = await res.json()
+      setNtsResults(prev => ({ ...prev, [je.id]: json }))
+      // 로컬 상태도 업데이트
+      setVendorJournals(prev => prev.map(j =>
+        j.id === je.id ? { ...j, nts_verified: json.verified } : j,
+      ))
+      // 거래처 카드 미확인 건수 갱신
+      await loadVendors()
+    } catch {
+      setNtsResults(prev => ({ ...prev, [je.id]: { verified: false, message: '네트워크 오류' } }))
+    } finally {
+      setNtsVerifyingId(null)
+    }
+  }
 
   // ── 폼 열기/닫기 ─────────────────────────────────────────
   function openCreate() {
@@ -589,7 +625,15 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                       </span>
                     )}
                   </div>
-                  <BookOpen className="w-4 h-4 text-gray-300 shrink-0 mt-0.5" />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {(v.unverified_evidence_count ?? 0) > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                        <ShieldAlert className="w-3 h-3" />
+                        {v.unverified_evidence_count}
+                      </span>
+                    )}
+                    <BookOpen className="w-4 h-4 text-gray-300 mt-0.5" />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   {v.representative && (
@@ -752,23 +796,64 @@ export function VendorsClient({ initial }: { initial: Vendor[] }) {
                       const totalAmt = (je.lines ?? []).reduce(
                         (s, l) => s + Math.max(l.debit_amount, l.credit_amount), 0
                       )
+                      const needsNts = je.evidence_type === '세금계산서' || je.evidence_type === '현금영수증'
+                      const isVerifying = ntsVerifyingId === je.id
+                      const ntsResult = ntsResults[je.id]
+                      const isVerified = ntsResult ? ntsResult.verified : (je.nts_verified ?? false)
                       return (
-                        <Link key={je.id} href={`/accounting/journal/${je.id}`}>
-                          <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:border-blue-200 hover:bg-blue-50/40 transition-colors">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-gray-900 truncate">{je.description}</span>
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{je.entry_type}</span>
+                        <div key={je.id} className="rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+                          <Link href={`/accounting/journal/${je.id}`}>
+                            <div className="flex items-center justify-between gap-3 p-2.5">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium text-gray-900 truncate">{je.description}</span>
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{je.entry_type}</span>
+                                  {needsNts && (
+                                    isVerified
+                                      ? <span className="flex items-center gap-0.5 text-xs text-green-600 shrink-0"><ShieldCheck className="w-3 h-3" />{je.evidence_type}</span>
+                                      : <span className="flex items-center gap-0.5 text-xs text-amber-600 shrink-0"><ShieldAlert className="w-3 h-3" />{je.evidence_type} 미확인</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-400 mt-0.5">{je.entry_number} · {je.entry_date}</p>
                               </div>
-                              <p className="text-xs text-gray-400 mt-0.5">{je.entry_number} · {je.entry_date}</p>
+                              {totalAmt > 0 && (
+                                <span className="text-sm font-semibold text-gray-700 shrink-0 tabular-nums">
+                                  {totalAmt.toLocaleString('ko-KR')}원
+                                </span>
+                              )}
                             </div>
-                            {totalAmt > 0 && (
-                              <span className="text-sm font-semibold text-gray-700 shrink-0 tabular-nums">
-                                {totalAmt.toLocaleString('ko-KR')}원
-                              </span>
-                            )}
-                          </div>
-                        </Link>
+                          </Link>
+                          {/* 승인번호 있고 미확인인 경우 확인 버튼 표시 */}
+                          {needsNts && je.nts_approval_number && !isVerified && (
+                            <div className="px-2.5 pb-2 flex items-center gap-2">
+                              <span className="text-xs text-gray-400 font-mono truncate">{je.nts_approval_number}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleNtsVerify(je)}
+                                disabled={isVerifying}
+                                className="ml-auto flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                              >
+                                {isVerifying
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <ShieldQuestion className="w-3 h-3" />
+                                }
+                                국세청 확인
+                              </button>
+                            </div>
+                          )}
+                          {/* 확인 결과 표시 */}
+                          {ntsResult && (
+                            <div className={`mx-2.5 mb-2 rounded px-2 py-1 text-xs flex items-center gap-1.5 ${ntsResult.verified ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {ntsResult.verified ? <ShieldCheck className="w-3 h-3 shrink-0" /> : <ShieldAlert className="w-3 h-3 shrink-0" />}
+                              <span>{ntsResult.message}</span>
+                              {ntsResult.hometax_url && (
+                                <a href={ntsResult.hometax_url} target="_blank" rel="noopener noreferrer" className="ml-auto underline text-blue-600">
+                                  홈택스 →
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </div>

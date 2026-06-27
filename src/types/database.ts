@@ -316,6 +316,8 @@ export interface Vendor {
   bank_name: string | null
   account_number: string | null
   account_holder: string | null
+  // 런타임 집계 (API 응답에만 포함, DB 컬럼 아님)
+  unverified_evidence_count?: number
 }
 
 export interface JournalEntry {
@@ -328,6 +330,10 @@ export interface JournalEntry {
   entry_type: JournalEntryType
   vendor_id: string | null
   evidence_type: EvidenceType | null
+  nts_approval_number: string | null
+  nts_verified: boolean
+  nts_verified_at: string | null
+  nts_verification_result: Record<string, unknown> | null
   reference_id: string | null
   reference_type: string | null
   status: JournalEntryStatus

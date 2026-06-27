@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { formatKRW } from '@/lib/utils/format'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { Pencil, Trash2, CheckCircle2, Filter, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Pencil, Trash2, CheckCircle2, Filter, Loader2, X, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react'
 
 type EntryStatus = 'draft' | 'posted' | 'reversed'
 type EntryType = string
@@ -19,6 +19,8 @@ interface JournalEntryRow {
   description: string
   entry_type: EntryType
   status: EntryStatus
+  evidence_type?: string | null
+  nts_verified?: boolean
   vendor: { name: string } | null
   lines: Array<{
     debit_amount: number
@@ -42,6 +44,7 @@ interface Props {
   filterQ?: string
   filterType?: string
   filterAccount?: string
+  filterUnverifiedOnly?: boolean
 }
 
 const STATUS_LABELS: Record<EntryStatus, { label: string; cls: string }> = {
@@ -89,7 +92,7 @@ function getAppliedUnit(entry: JournalEntryRow): string {
 
 export function JournalLedgerTable({
   entries, page, totalPages, total,
-  filterStatus, filterFrom, filterTo, filterQ, filterType, filterAccount,
+  filterStatus, filterFrom, filterTo, filterQ, filterType, filterAccount, filterUnverifiedOnly,
 }: Props) {
   const router = useRouter()
 
@@ -126,7 +129,7 @@ export function JournalLedgerTable({
   }
 
   // URL 생성 (모든 필터 파라미터 보존)
-  function buildUrl(opts: { status?: string; from?: string; to?: string; q?: string; type?: string; account?: string; page?: number } = {}) {
+  function buildUrl(opts: { status?: string; from?: string; to?: string; q?: string; type?: string; account?: string; unverified?: boolean; page?: number } = {}) {
     const q = new URLSearchParams()
     const s   = opts.status  !== undefined ? opts.status  : localStatus
     const frm = opts.from    !== undefined ? opts.from    : localFrom
@@ -142,8 +145,16 @@ export function JournalLedgerTable({
     if (sq)  q.set('q',       sq)
     if (typ) q.set('type',    typ)
     if (acc) q.set('account', acc)
+    const unv = opts.unverified !== undefined ? opts.unverified : filterUnverifiedOnly
+    if (unv) q.set('unverified', '1')
     q.set('page', String(pg))
     return `?${q.toString()}`
+  }
+
+  function toggleUnverifiedFilter() {
+    const next = !filterUnverifiedOnly
+    setSelectedIds(new Set())
+    router.push(buildUrl({ unverified: next, page: 1 }))
   }
 
   function handleSearch() {
@@ -417,6 +428,25 @@ export function JournalLedgerTable({
             )}
           </button>
 
+          {/* 증빙 미확인 퀵 토글 */}
+          <button
+            onClick={toggleUnverifiedFilter}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors font-medium',
+              filterUnverifiedOnly
+                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700',
+            )}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            증빙 미확인
+            {filterUnverifiedOnly && (
+              <span className="bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
+                {total}
+              </span>
+            )}
+          </button>
+
           {/* 활성 필터 태그 표시 */}
           {hasActiveFilter && (
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -607,6 +637,11 @@ export function JournalLedgerTable({
                       <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap', statusCfg.cls)}>
                         {statusCfg.label}
                       </span>
+                      {(entry.evidence_type === '세금계산서' || entry.evidence_type === '현금영수증') && (
+                        entry.nts_verified
+                          ? <span title="국세청 확인 완료"><ShieldCheck className="w-3.5 h-3.5 text-green-500 shrink-0" /></span>
+                          : <span title="증빙 미확인"><ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" /></span>
+                      )}
                     </div>
                   </td>
 
