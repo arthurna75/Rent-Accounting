@@ -19,7 +19,7 @@ const UpdateSchema = z.object({
   action: z.literal('update'),
   entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   description: z.string().min(1),
-  entry_type: z.enum(['일반','임대수익','보증금수령','보증금반환','감가상각','간주임대료','세금','관리비','비용지출']),
+  entry_type: z.enum(['일반','임대수익','보증금수령','보증금반환','감가상각','간주임대료','세금','관리비','비용지출','카드지출','카드결제']),
   vendor_id: z.string().uuid().optional().nullable(),
   evidence_type: z.enum(['현금영수증','세금계산서','영수증','기타','사업자용 카드']).optional().nullable(),
   nts_approval_number: z.string().optional().nullable(),
