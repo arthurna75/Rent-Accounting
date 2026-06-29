@@ -56,49 +56,54 @@ export const SAMPLE_ORG = {
 // ------ 부동산 ------
 export const SAMPLE_PROPERTIES = [
   {
-    id: 'sp1', name: '강남 오피스텔', property_type: '오피스텔',
+    id: 'sp1', name: '강남 오피스텔', building_name: '강남 오피스텔', unit_number: '101호',
+    property_type: '오피스텔',
     address_road: '서울 강남구 테헤란로 123', address_detail: '101호',
     rental_tax_type: '과세', acquisition_cost: 300_000_000,
     building_area: 84.5, useful_life: 40, depreciation_method: '정액법',
     building_value: 180_000_000, salvage_value: 0, is_active: true,
     acquisition_date: '2020-03-15',
-    activeContracts: 1,
+    activeContracts: 1, lease_contracts: [{ status: 'active' }],
   },
   {
-    id: 'sp2', name: '서초 아파트', property_type: '아파트',
+    id: 'sp2', name: '서초 아파트', building_name: '서초 아파트', unit_number: '305호',
+    property_type: '아파트',
     address_road: '서울 서초구 서초대로 456', address_detail: '305호',
     rental_tax_type: '면세', acquisition_cost: 450_000_000,
     building_area: 59.3, useful_life: 40, depreciation_method: '정액법',
     building_value: 220_000_000, salvage_value: 0, is_active: true,
     acquisition_date: '2019-07-01',
-    activeContracts: 1,
+    activeContracts: 1, lease_contracts: [{ status: 'active' }],
   },
   {
-    id: 'sp3', name: '마포 다세대', property_type: '다세대',
+    id: 'sp3', name: '마포 다세대', building_name: '마포 다세대', unit_number: '',
+    property_type: '다세대',
     address_road: '서울 마포구 마포대로 789', address_detail: null,
     rental_tax_type: '면세', acquisition_cost: 180_000_000,
     building_area: 45.2, useful_life: 40, depreciation_method: '정액법',
     building_value: 90_000_000, salvage_value: 0, is_active: true,
     acquisition_date: '2021-01-20',
-    activeContracts: 0,
+    activeContracts: 0, lease_contracts: [],
   },
   {
-    id: 'sp4', name: '송파 상가', property_type: '상가',
+    id: 'sp4', name: '송파 상가', building_name: '송파 상가', unit_number: '1층',
+    property_type: '상가',
     address_road: '서울 송파구 올림픽로 321', address_detail: '1층',
     rental_tax_type: '과세', acquisition_cost: 250_000_000,
     building_area: 62.0, useful_life: 40, depreciation_method: '정액법',
     building_value: 140_000_000, salvage_value: 0, is_active: true,
     acquisition_date: '2022-05-10',
-    activeContracts: 1,
+    activeContracts: 1, lease_contracts: [{ status: 'active' }],
   },
   {
-    id: 'sp5', name: '용산 오피스텔', property_type: '오피스텔',
+    id: 'sp5', name: '용산 오피스텔', building_name: '용산 오피스텔', unit_number: '502호',
+    property_type: '오피스텔',
     address_road: '서울 용산구 이태원로 654', address_detail: '502호',
     rental_tax_type: '과세', acquisition_cost: 200_000_000,
     building_area: 33.5, useful_life: 40, depreciation_method: '정액법',
     building_value: 110_000_000, salvage_value: 0, is_active: true,
     acquisition_date: '2023-09-01',
-    activeContracts: 1,
+    activeContracts: 1, lease_contracts: [{ status: 'active' }],
   },
 ]
 
@@ -298,4 +303,16 @@ export const SAMPLE_PL_STATS = {
   total_revenue:    _s(_revByMonth),
   total_expense:    _s(_expByMonth),
   total_net_income: _s(_revByMonth) - _s(_expByMonth),
+}
+
+// ------ 대시보드 DashboardRentalCard 용 연간·분기 임대수익 ------
+export const SAMPLE_DASHBOARD_RENTAL = {
+  year: new Date().getFullYear(),
+  yearTotal: _s(_revByMonth),
+  quarterly: {
+    q1: _revByMonth.slice(0, 3).reduce((s, v) => s + v, 0),
+    q2: _revByMonth.slice(3, 6).reduce((s, v) => s + v, 0),
+    q3: _revByMonth.slice(6, 9).reduce((s, v) => s + v, 0),
+    q4: _revByMonth.slice(9, 12).reduce((s, v) => s + v, 0),
+  },
 }

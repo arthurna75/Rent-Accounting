@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { SAMPLE_ORG } from '@/lib/sample-data'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -11,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return (
       <DashboardShell
         user={null}
-        organization="예시 데이터"
+        organization={SAMPLE_ORG.name}
         isSampleMode
         isGuest
       >
