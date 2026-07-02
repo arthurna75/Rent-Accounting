@@ -1,16 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatKRW } from '@/lib/utils/format'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { Pencil, Trash2, CheckCircle2, Filter, Loader2, X, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Pencil, Trash2, CheckCircle2, Loader2, X, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck, Bookmark } from 'lucide-react'
 
 type EntryStatus = 'draft' | 'posted' | 'reversed'
 type EntryType = string
+type AccountType = '자산' | '부채' | '자본' | '수익' | '비용'
 
 interface JournalEntryRow {
   id: string
@@ -33,6 +33,19 @@ interface JournalEntryRow {
   }>
 }
 
+interface VendorOption { id: string; name: string }
+interface ContractOption { id: string; label: string }
+interface AccountOption { id: string; code: string; name: string; account_type: AccountType }
+
+interface FilterPreset {
+  id: string
+  name: string
+  filters: {
+    from?: string; to?: string; q?: string; type?: string; status?: string
+    vendorId?: string; contractId?: string; accountType?: string; accountId?: string
+  }
+}
+
 interface Props {
   entries: JournalEntryRow[]
   page: number
@@ -43,8 +56,14 @@ interface Props {
   filterTo?: string
   filterQ?: string
   filterType?: string
-  filterAccount?: string
+  filterAccountType?: string
+  filterAccountId?: string
+  filterVendorId?: string
+  filterContractId?: string
   filterUnverifiedOnly?: boolean
+  vendors: VendorOption[]
+  contracts: ContractOption[]
+  accounts: AccountOption[]
 }
 
 const STATUS_LABELS: Record<EntryStatus, { label: string; cls: string }> = {
@@ -70,6 +89,22 @@ const ENTRY_TYPES = [
   '감가상각', '간주임대료', '세금', '관리비', '비용지출',
 ]
 
+const ACCOUNT_TYPES: AccountType[] = ['자산', '부채', '자본', '수익', '비용']
+
+const PRESET_STORAGE_KEY = 'journal_filter_presets'
+
+function loadPresets(): FilterPreset[] {
+  try {
+    return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY) ?? '[]')
+  } catch {
+    return []
+  }
+}
+
+function savePresets(presets: FilterPreset[]) {
+  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets))
+}
+
 function buildPageRange(current: number, total: number): (number | '...')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const result: (number | '...')[] = [1]
@@ -90,9 +125,22 @@ function getAppliedUnit(entry: JournalEntryRow): string {
   return ''
 }
 
+function getAccountNames(entry: JournalEntryRow): string {
+  const names = entry.lines
+    .map(l => l.account?.name)
+    .filter(Boolean) as string[]
+  const unique = [...new Set(names)]
+  if (unique.length === 0) return ''
+  if (unique.length <= 2) return unique.join(' / ')
+  return `${unique[0]} / ${unique[1]} +${unique.length - 2}`
+}
+
 export function JournalLedgerTable({
   entries, page, totalPages, total,
-  filterStatus, filterFrom, filterTo, filterQ, filterType, filterAccount, filterUnverifiedOnly,
+  filterStatus, filterFrom, filterTo, filterQ, filterType,
+  filterAccountType, filterAccountId, filterVendorId, filterContractId,
+  filterUnverifiedOnly,
+  vendors, contracts, accounts,
 }: Props) {
   const router = useRouter()
 
@@ -101,20 +149,34 @@ export function JournalLedgerTable({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkApproving, setBulkApproving] = useState(false)
 
-  // 필터 패널 열림 여부
-  const hasActiveFilter = !!(filterFrom || filterTo || filterQ || filterType || filterAccount || filterStatus)
-  const [showFilter, setShowFilter] = useState(hasActiveFilter)
+  // 로컬 필터 상태
+  const [localFrom,        setLocalFrom]        = useState(filterFrom        ?? '')
+  const [localTo,          setLocalTo]          = useState(filterTo          ?? '')
+  const [localQ,           setLocalQ]           = useState(filterQ           ?? '')
+  const [localType,        setLocalType]        = useState(filterType        ?? '')
+  const [localStatus,      setLocalStatus]      = useState(filterStatus      ?? '')
+  const [localAccountType, setLocalAccountType] = useState(filterAccountType ?? '')
+  const [localAccountId,   setLocalAccountId]   = useState(filterAccountId   ?? '')
+  const [localVendorId,    setLocalVendorId]    = useState(filterVendorId    ?? '')
+  const [localContractId,  setLocalContractId]  = useState(filterContractId  ?? '')
 
-  // 로컬 필터 상태 (서버 props 기반 초기값)
-  const [localFrom,    setLocalFrom]    = useState(filterFrom    ?? '')
-  const [localTo,      setLocalTo]      = useState(filterTo      ?? '')
-  const [localQ,       setLocalQ]       = useState(filterQ       ?? '')
-  const [localType,    setLocalType]    = useState(filterType    ?? '')
-  const [localStatus,  setLocalStatus]  = useState(filterStatus  ?? '')
-  const [localAccount, setLocalAccount] = useState(filterAccount ?? '')
+  // 변형(preset) 관련
+  const [presets, setPresets] = useState<FilterPreset[]>([])
+  const [showPresetSave, setShowPresetSave] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [selectedPresetId, setSelectedPresetId] = useState('')
+
+  useEffect(() => {
+    setPresets(loadPresets())
+  }, [])
 
   const draftEntries     = entries.filter(e => e.status === 'draft')
   const allDraftSelected = draftEntries.length > 0 && draftEntries.every(e => selectedIds.has(e.id))
+
+  // 현재 유형에 따른 계정과목 목록
+  const filteredAccounts = localAccountType
+    ? accounts.filter(a => a.account_type === localAccountType)
+    : accounts
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => {
@@ -128,33 +190,36 @@ export function JournalLedgerTable({
     setSelectedIds(allDraftSelected ? new Set() : new Set(draftEntries.map(e => e.id)))
   }
 
-  // URL 생성 (모든 필터 파라미터 보존)
-  function buildUrl(opts: { status?: string; from?: string; to?: string; q?: string; type?: string; account?: string; unverified?: boolean; page?: number } = {}) {
+  function buildUrl(opts: {
+    status?: string; from?: string; to?: string; q?: string; type?: string
+    accountType?: string; accountId?: string; vendorId?: string; contractId?: string
+    unverified?: boolean; page?: number
+  } = {}) {
     const q = new URLSearchParams()
-    const s   = opts.status  !== undefined ? opts.status  : localStatus
-    const frm = opts.from    !== undefined ? opts.from    : localFrom
-    const to  = opts.to      !== undefined ? opts.to      : localTo
-    const sq  = opts.q       !== undefined ? opts.q       : localQ
-    const typ = opts.type    !== undefined ? opts.type    : localType
-    const acc = opts.account !== undefined ? opts.account : localAccount
-    const pg  = opts.page    !== undefined ? opts.page    : 1
+    const s    = opts.status      !== undefined ? opts.status      : localStatus
+    const frm  = opts.from        !== undefined ? opts.from        : localFrom
+    const to   = opts.to          !== undefined ? opts.to          : localTo
+    const sq   = opts.q           !== undefined ? opts.q           : localQ
+    const typ  = opts.type        !== undefined ? opts.type        : localType
+    const aTyp = opts.accountType !== undefined ? opts.accountType : localAccountType
+    const aId  = opts.accountId   !== undefined ? opts.accountId   : localAccountId
+    const vId  = opts.vendorId    !== undefined ? opts.vendorId    : localVendorId
+    const cId  = opts.contractId  !== undefined ? opts.contractId  : localContractId
+    const pg   = opts.page        !== undefined ? opts.page        : 1
 
-    if (s)   q.set('status',  s)
-    if (frm) q.set('from',    frm)
-    if (to)  q.set('to',      to)
-    if (sq)  q.set('q',       sq)
-    if (typ) q.set('type',    typ)
-    if (acc) q.set('account', acc)
+    if (s)    q.set('status',       s)
+    if (frm)  q.set('from',         frm)
+    if (to)   q.set('to',           to)
+    if (sq)   q.set('q',            sq)
+    if (typ)  q.set('type',         typ)
+    if (aTyp) q.set('account_type', aTyp)
+    if (aId)  q.set('account_id',   aId)
+    if (vId)  q.set('vendor_id',    vId)
+    if (cId)  q.set('contract_id',  cId)
     const unv = opts.unverified !== undefined ? opts.unverified : filterUnverifiedOnly
     if (unv) q.set('unverified', '1')
     q.set('page', String(pg))
     return `?${q.toString()}`
-  }
-
-  function toggleUnverifiedFilter() {
-    const next = !filterUnverifiedOnly
-    setSelectedIds(new Set())
-    router.push(buildUrl({ unverified: next, page: 1 }))
   }
 
   function handleSearch() {
@@ -164,12 +229,19 @@ export function JournalLedgerTable({
 
   function handleReset() {
     setLocalFrom(''); setLocalTo(''); setLocalQ('')
-    setLocalType(''); setLocalStatus(''); setLocalAccount('')
+    setLocalType(''); setLocalStatus(''); setLocalAccountType('')
+    setLocalAccountId(''); setLocalVendorId(''); setLocalContractId('')
     setSelectedIds(new Set())
+    setSelectedPresetId('')
     router.push('?page=1')
   }
 
-  // 임시만 보기 퀵 토글
+  function toggleUnverifiedFilter() {
+    const next = !filterUnverifiedOnly
+    setSelectedIds(new Set())
+    router.push(buildUrl({ unverified: next, page: 1 }))
+  }
+
   function toggleDraftFilter() {
     const next = filterStatus !== 'draft' ? 'draft' : ''
     setLocalStatus(next)
@@ -180,7 +252,9 @@ export function JournalLedgerTable({
   function pageHref(p: number) {
     return buildUrl({
       status: filterStatus, from: filterFrom, to: filterTo,
-      q: filterQ, type: filterType, account: filterAccount, page: p,
+      q: filterQ, type: filterType,
+      accountType: filterAccountType, accountId: filterAccountId,
+      vendorId: filterVendorId, contractId: filterContractId, page: p,
     })
   }
 
@@ -207,22 +281,64 @@ export function JournalLedgerTable({
     router.push(buildUrl({ from, to, page: 1 }))
   }
 
-  function removeFilter(key: 'type' | 'q' | 'account' | 'dates' | 'status') {
-    if (key === 'type')   setLocalType('')
-    if (key === 'q')      setLocalQ('')
-    if (key === 'account') setLocalAccount('')
-    if (key === 'dates')  { setLocalFrom(''); setLocalTo('') }
-    if (key === 'status') setLocalStatus('')
+  function handleAccountTypeChange(value: string) {
+    setLocalAccountType(value)
+    setLocalAccountId('') // 유형 변경 시 계정 초기화
+  }
+
+  // 변형 저장
+  function handleSavePreset() {
+    if (!presetName.trim()) return
+    const preset: FilterPreset = {
+      id: crypto.randomUUID(),
+      name: presetName.trim(),
+      filters: {
+        from: localFrom || undefined,
+        to: localTo || undefined,
+        q: localQ || undefined,
+        type: localType || undefined,
+        status: localStatus || undefined,
+        vendorId: localVendorId || undefined,
+        contractId: localContractId || undefined,
+        accountType: localAccountType || undefined,
+        accountId: localAccountId || undefined,
+      },
+    }
+    const next = [...presets, preset]
+    setPresets(next)
+    savePresets(next)
+    setPresetName('')
+    setShowPresetSave(false)
+  }
+
+  // 변형 적용
+  function handleApplyPreset(id: string) {
+    const preset = presets.find(p => p.id === id)
+    if (!preset) return
+    const f = preset.filters
+    setLocalFrom(f.from ?? '')
+    setLocalTo(f.to ?? '')
+    setLocalQ(f.q ?? '')
+    setLocalType(f.type ?? '')
+    setLocalStatus(f.status ?? '')
+    setLocalVendorId(f.vendorId ?? '')
+    setLocalContractId(f.contractId ?? '')
+    setLocalAccountType(f.accountType ?? '')
+    setLocalAccountId(f.accountId ?? '')
     setSelectedIds(new Set())
-    const q = new URLSearchParams()
-    if (filterStatus  && key !== 'status') q.set('status',  filterStatus)
-    if (filterFrom    && key !== 'dates')  q.set('from',    filterFrom)
-    if (filterTo      && key !== 'dates')  q.set('to',      filterTo)
-    if (filterQ       && key !== 'q')      q.set('q',       filterQ)
-    if (filterType    && key !== 'type')   q.set('type',    filterType)
-    if (filterAccount && key !== 'account') q.set('account', filterAccount)
-    q.set('page', '1')
-    router.push(`?${q.toString()}`)
+    router.push(buildUrl({
+      from: f.from, to: f.to, q: f.q, type: f.type, status: f.status,
+      vendorId: f.vendorId, contractId: f.contractId,
+      accountType: f.accountType, accountId: f.accountId, page: 1,
+    }))
+  }
+
+  // 변형 삭제
+  function handleDeletePreset(id: string) {
+    const next = presets.filter(p => p.id !== id)
+    setPresets(next)
+    savePresets(next)
+    if (selectedPresetId === id) setSelectedPresetId('')
   }
 
   async function handleApprove(id: string) {
@@ -286,130 +402,213 @@ export function JournalLedgerTable({
     }
   }
 
-  const isDraftFilter    = filterStatus === 'draft'
-  const activeFilterCount = [filterFrom, filterTo, filterQ, filterType, filterAccount, filterStatus].filter(Boolean).length
+  const isDraftFilter = filterStatus === 'draft'
+  const hasActiveFilter = !!(filterFrom || filterTo || filterQ || filterType || filterAccountType || filterAccountId || filterVendorId || filterContractId || filterStatus)
+  const activeFilterCount = [filterFrom || filterTo, filterQ, filterType, filterAccountType || filterAccountId, filterVendorId, filterContractId, filterStatus].filter(Boolean).length
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
 
-      {/* ── 필터 패널 ──────────────────────────────── */}
-      {showFilter && (
-        <div className="border-b border-gray-200 bg-gray-50/70 px-4 py-3 space-y-3">
-          {/* 거래일 + 유형 + 상태 */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1 min-w-0">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 (시작)</label>
-              <input
-                type="date"
-                value={localFrom}
-                onChange={e => setLocalFrom(e.target.value)}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <span className="text-gray-400 text-sm pb-1.5">~</span>
-            <div className="flex flex-col gap-1 min-w-0">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 (종료)</label>
-              <input
-                type="date"
-                value={localTo}
-                onChange={e => setLocalTo(e.target.value)}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            {/* 날짜 퀵 선택 */}
-            <div className="flex items-end gap-1.5 pb-0.5">
-              {(['thisMonth', 'lastMonth', 'thisYear'] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setQuickDate(kind)}
-                  className="h-8 px-2.5 text-xs rounded-md border border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors font-medium whitespace-nowrap"
-                >
-                  {kind === 'thisMonth' ? '이번 달' : kind === 'lastMonth' ? '지난 달' : '올해'}
-                </button>
-              ))}
-            </div>
+      {/* ── 필터 패널 (항상 표시) ─────────────────────────────── */}
+      <div className="border-b border-gray-200 bg-gray-50/70 px-4 py-3 space-y-3">
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">유형</label>
-              <select
-                value={localType}
-                onChange={e => setLocalType(e.target.value)}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">전체</option>
-                {ENTRY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">상태</label>
-              <select
-                value={localStatus}
-                onChange={e => setLocalStatus(e.target.value)}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="">전체</option>
-                <option value="draft">임시</option>
-                <option value="posted">승인</option>
-                <option value="reversed">역분개</option>
-              </select>
-            </div>
+        {/* 행 1: 거래일 + 유형 + 상태 */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 시작</label>
+            <input
+              type="date"
+              value={localFrom}
+              onChange={e => setLocalFrom(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
           </div>
-
-          {/* 적요 + 계정과목 */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">적요 (LIKE 검색)</label>
-              <input
-                type="text"
-                placeholder="적요에 포함된 단어..."
-                value={localQ}
-                onChange={e => setLocalQ(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
-              <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">계정과목 (코드·명)</label>
-              <input
-                type="text"
-                placeholder="예: 102, 임대보증금..."
-                value={localAccount}
-                onChange={e => setLocalAccount(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              <Button onClick={handleSearch} size="sm" className="h-8 text-xs">조회</Button>
-              <Button onClick={handleReset} size="sm" variant="outline" className="h-8 text-xs">초기화</Button>
-            </div>
+          <span className="text-gray-400 text-sm pb-1.5">~</span>
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래일 종료</label>
+            <input
+              type="date"
+              value={localTo}
+              onChange={e => setLocalTo(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="flex items-end gap-1.5 pb-0.5">
+            {(['thisMonth', 'lastMonth', 'thisYear'] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setQuickDate(kind)}
+                className="h-8 px-2.5 text-xs rounded-md border border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors font-medium whitespace-nowrap"
+              >
+                {kind === 'thisMonth' ? '이번 달' : kind === 'lastMonth' ? '지난 달' : '올해'}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">유형</label>
+            <select
+              value={localType}
+              onChange={e => setLocalType(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">전체</option>
+              {ENTRY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">상태</label>
+            <select
+              value={localStatus}
+              onChange={e => setLocalStatus(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">전체</option>
+              <option value="draft">임시</option>
+              <option value="posted">승인</option>
+              <option value="reversed">역분개</option>
+            </select>
           </div>
         </div>
-      )}
+
+        {/* 행 2: 계정과목(2단계) + 거래처 + 적용호수 */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">계정 유형</label>
+            <select
+              value={localAccountType}
+              onChange={e => handleAccountTypeChange(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">전체</option>
+              {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-[160px]">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">계정과목</label>
+            <select
+              value={localAccountId}
+              onChange={e => setLocalAccountId(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">{localAccountType ? `${localAccountType} 전체` : '전체'}</option>
+              {filteredAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.code} {a.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-[140px]">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">거래처</label>
+            <select
+              value={localVendorId}
+              onChange={e => setLocalVendorId(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">전체</option>
+              {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 min-w-[160px]">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">적용호수</label>
+            <select
+              value={localContractId}
+              onChange={e => setLocalContractId(e.target.value)}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">전체</option>
+              {contracts.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+            <label className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">적요</label>
+            <input
+              type="text"
+              placeholder="적요에 포함된 단어..."
+              value={localQ}
+              onChange={e => setLocalQ(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              className="h-8 rounded-md border border-input bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <Button onClick={handleSearch} size="sm" className="h-8 text-xs">조회</Button>
+            <Button onClick={handleReset} size="sm" variant="outline" className="h-8 text-xs">초기화</Button>
+          </div>
+        </div>
+
+        {/* 행 3: 변형(preset) 저장/불러오기 */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-200">
+          <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+            <Bookmark className="w-3 h-3 inline mr-1" />변형
+          </span>
+
+          {/* 저장된 변형 목록 */}
+          {presets.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {presets.map(p => (
+                <div key={p.id} className="flex items-center gap-0">
+                  <button
+                    onClick={() => { setSelectedPresetId(p.id); handleApplyPreset(p.id) }}
+                    className={cn(
+                      'text-[11px] px-2.5 py-1 rounded-l-md border transition-colors font-medium',
+                      selectedPresetId === p.id
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50',
+                    )}
+                  >
+                    {p.name}
+                  </button>
+                  <button
+                    onClick={() => handleDeletePreset(p.id)}
+                    className={cn(
+                      'text-[11px] px-1.5 py-1 rounded-r-md border-t border-b border-r transition-colors',
+                      selectedPresetId === p.id
+                        ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-700'
+                        : 'bg-white text-gray-400 border-gray-200 hover:text-red-500 hover:bg-red-50',
+                    )}
+                    title="변형 삭제"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 변형 저장 폼 */}
+          {showPresetSave ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="변형 이름..."
+                value={presetName}
+                onChange={e => setPresetName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSavePreset(); if (e.key === 'Escape') setShowPresetSave(false) }}
+                autoFocus
+                className="h-7 w-36 rounded-md border border-blue-300 bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <Button onClick={handleSavePreset} size="sm" className="h-7 text-xs px-2">저장</Button>
+              <button
+                onClick={() => { setShowPresetSave(false); setPresetName('') }}
+                className="text-xs text-gray-400 hover:text-gray-600 px-1"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowPresetSave(true)}
+              className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              + 현재 필터를 변형으로 저장
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── 툴바 ───────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-b border-gray-100 bg-gray-50/60">
-        <div className="flex items-center gap-2">
-          {/* 필터 패널 토글 */}
-          <button
-            onClick={() => setShowFilter(v => !v)}
-            className={cn(
-              'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors font-medium',
-              showFilter
-                ? 'bg-blue-50 border-blue-300 text-blue-700'
-                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700',
-            )}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            필터
-            {activeFilterCount > 0 && (
-              <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded-full text-[10px] font-semibold">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-
+        <div className="flex items-center gap-2 flex-wrap">
           {/* 임시만 보기 퀵 토글 */}
           <button
             onClick={toggleDraftFilter}
@@ -447,60 +646,49 @@ export function JournalLedgerTable({
             )}
           </button>
 
-          {/* 활성 필터 태그 표시 */}
+          {/* 활성 필터 태그 */}
           {hasActiveFilter && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {filterStatus && filterStatus !== 'draft' && (
-                <button
-                  onClick={() => removeFilter('status')}
-                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
-                >
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
                   상태: {filterStatus === 'posted' ? '승인' : '역분개'}
-                  <X className="w-2.5 h-2.5 ml-0.5" />
-                </button>
+                </span>
               )}
               {filterType && (
-                <button
-                  onClick={() => removeFilter('type')}
-                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
-                >
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
                   유형: {filterType}
-                  <X className="w-2.5 h-2.5 ml-0.5" />
-                </button>
+                </span>
               )}
               {filterQ && (
-                <button
-                  onClick={() => removeFilter('q')}
-                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
-                >
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
                   적요: {filterQ}
-                  <X className="w-2.5 h-2.5 ml-0.5" />
-                </button>
+                </span>
               )}
-              {filterAccount && (
-                <button
-                  onClick={() => removeFilter('account')}
-                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
-                >
-                  계정: {filterAccount}
-                  <X className="w-2.5 h-2.5 ml-0.5" />
-                </button>
+              {filterAccountType && !filterAccountId && (
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  계정유형: {filterAccountType}
+                </span>
+              )}
+              {filterAccountId && (
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  계정: {accounts.find(a => a.id === filterAccountId)?.name ?? filterAccountId}
+                </span>
+              )}
+              {filterVendorId && (
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  거래처: {vendors.find(v => v.id === filterVendorId)?.name ?? filterVendorId}
+                </span>
+              )}
+              {filterContractId && (
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  호수: {contracts.find(c => c.id === filterContractId)?.label ?? filterContractId}
+                </span>
               )}
               {(filterFrom || filterTo) && (
-                <button
-                  onClick={() => removeFilter('dates')}
-                  className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full hover:bg-blue-100"
-                >
+                <span className="flex items-center gap-0.5 text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
                   {filterFrom ?? '~'} ~ {filterTo ?? '~'}
-                  <X className="w-2.5 h-2.5 ml-0.5" />
-                </button>
+                </span>
               )}
-              <button
-                onClick={handleReset}
-                className="text-[11px] text-gray-400 hover:text-red-500 flex items-center gap-0.5"
-              >
-                <X className="w-3 h-3" /> 전체 해제
-              </button>
             </div>
           )}
         </div>
@@ -550,9 +738,9 @@ export function JournalLedgerTable({
               </th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 w-28 hidden lg:table-cell">전표번호</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 w-24">거래일</th>
-              <th className="text-left px-3 py-3 font-medium text-gray-600">적요</th>
-              <th className="text-left px-3 py-3 font-medium text-gray-600 w-32 hidden xl:table-cell">적용호수</th>
-              <th className="text-left px-3 py-3 font-medium text-gray-600 w-24 hidden xl:table-cell">지급처</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600">적요 / 계정과목</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600 w-32 hidden lg:table-cell">적용호수</th>
+              <th className="text-left px-3 py-3 font-medium text-gray-600 w-24 hidden lg:table-cell">거래처</th>
               <th className="text-left px-3 py-3 font-medium text-gray-600 w-36 hidden sm:table-cell">유형 · 상태</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 w-24">차변</th>
               <th className="text-right px-3 py-3 font-medium text-gray-600 w-24 hidden sm:table-cell">대변</th>
@@ -578,6 +766,7 @@ export function JournalLedgerTable({
               const isDraft     = entry.status === 'draft'
               const isSelected  = selectedIds.has(entry.id)
               const appliedUnit = getAppliedUnit(entry)
+              const accountNames = getAccountNames(entry)
 
               return (
                 <tr
@@ -609,20 +798,26 @@ export function JournalLedgerTable({
                     {entry.entry_date}
                   </td>
 
-                  <td className="px-3 py-3 text-gray-800 max-w-[100px] sm:max-w-[160px] xl:max-w-[200px] truncate">
-                    <Link href={`/accounting/journal/${entry.id}`} className="hover:text-blue-600 hover:underline">
+                  {/* 적요 + 계정과목명 서브텍스트 */}
+                  <td className="px-3 py-3 max-w-[120px] sm:max-w-[180px] xl:max-w-[240px]">
+                    <Link href={`/accounting/journal/${entry.id}`} className="hover:text-blue-600 hover:underline text-gray-800 block truncate">
                       {entry.description}
                     </Link>
+                    {accountNames && (
+                      <span className="text-[10px] text-gray-400 block truncate mt-0.5">
+                        {accountNames}
+                      </span>
+                    )}
                   </td>
 
-                  <td className="px-3 py-3 hidden xl:table-cell">
+                  <td className="px-3 py-3 hidden lg:table-cell">
                     {appliedUnit
                       ? <span className="text-xs text-gray-700 whitespace-nowrap">{appliedUnit}</span>
                       : <span className="text-xs text-gray-300">—</span>
                     }
                   </td>
 
-                  <td className="px-3 py-3 hidden xl:table-cell">
+                  <td className="px-3 py-3 hidden lg:table-cell">
                     {entry.vendor
                       ? <span className="text-xs text-gray-700 truncate max-w-[80px] block">{entry.vendor.name}</span>
                       : <span className="text-xs text-gray-300">—</span>
@@ -704,12 +899,8 @@ export function JournalLedgerTable({
         <p className="text-xs text-gray-500">총 {total.toLocaleString()}건</p>
         {totalPages > 1 && (
           <div className="flex items-center gap-1">
-            {/* 이전 버튼 */}
             {page > 1 ? (
-              <Link
-                href={pageHref(page - 1)}
-                className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
-              >
+              <Link href={pageHref(page - 1)} className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100">
                 <ChevronLeft className="w-4 h-4" />
               </Link>
             ) : (
@@ -720,18 +911,14 @@ export function JournalLedgerTable({
 
             {buildPageRange(page, totalPages).map((p, idx) =>
               p === '...' ? (
-                <span key={`ellipsis-${idx}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">
-                  …
-                </span>
+                <span key={`ellipsis-${idx}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">…</span>
               ) : (
                 <Link
                   key={p}
                   href={pageHref(p)}
                   className={cn(
                     'w-7 h-7 flex items-center justify-center rounded text-xs font-medium',
-                    p === page
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-100',
+                    p === page ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100',
                   )}
                 >
                   {p}
@@ -739,12 +926,8 @@ export function JournalLedgerTable({
               )
             )}
 
-            {/* 다음 버튼 */}
             {page < totalPages ? (
-              <Link
-                href={pageHref(page + 1)}
-                className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
-              >
+              <Link href={pageHref(page + 1)} className="w-7 h-7 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100">
                 <ChevronRight className="w-4 h-4" />
               </Link>
             ) : (
